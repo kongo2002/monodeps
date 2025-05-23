@@ -1,0 +1,9 @@
+[package]
+name = "mono_deps"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.98"
+getopts = "0.2.21"
+walkdir = "2.5.0"
