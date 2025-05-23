@@ -13,7 +13,7 @@ impl Opts {
         let args: Vec<_> = std::env::args().collect();
 
         let mut opts = Options::new();
-        opts.optopt("t", "target", "target directory to work on", "DIR");
+        opts.optopt("t", "target", "target directory to operate on", "DIR");
         opts.optopt("c", "config", "configuration file", "FILE");
         opts.optflag("h", "help", "show help");
 

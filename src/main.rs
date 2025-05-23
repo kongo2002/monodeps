@@ -13,7 +13,7 @@ fn main() {
         }
     };
 
-    if let Ok(svs) = service::Service::discover(&opts.target.path) {
+    if let Ok(svs) = service::Service::discover(&opts.target.canonicalized) {
         println!("{:?}", svs)
     }
 }
