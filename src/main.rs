@@ -1,11 +1,10 @@
-use std::collections::HashSet;
-
 use self::cli::Opts;
 
 use anyhow::Result;
 
 mod cli;
 mod config;
+mod dependency;
 mod path;
 mod service;
 
@@ -14,6 +13,7 @@ fn main() {
     let changed_files = bail_out(collect_changed_files());
 
     if let Ok(svs) = service::Service::discover(&opts.target.canonicalized) {
+        let svs = dependency::resolve(svs, changed_files).unwrap();
         for svc in svs {
             println!("{}", svc)
         }
@@ -30,11 +30,11 @@ fn bail_out<T>(result: Result<T>) -> T {
     }
 }
 
-fn collect_changed_files() -> Result<HashSet<String>> {
-    let mut all = HashSet::new();
+fn collect_changed_files() -> Result<Vec<String>> {
+    let mut all = Vec::new();
 
     for line in std::io::stdin().lines() {
-        all.insert(line?);
+        all.push(line?);
     }
 
     Ok(all)

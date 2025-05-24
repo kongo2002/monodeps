@@ -6,14 +6,32 @@ use crate::path::PathInfo;
 use anyhow::Result;
 use walkdir::{DirEntry, WalkDir};
 
+#[derive(Debug, PartialEq)]
+pub enum BuildTrigger {
+    FileChange,
+    Dependency,
+    AutoDiscovery,
+}
+
 #[derive(Debug)]
 pub struct Service {
     pub path: PathInfo,
     pub depsfile: Depsfile,
-    depsfile_location: PathInfo,
+    pub depsfile_location: PathInfo,
+    triggers: Vec<BuildTrigger>,
 }
 
 impl Service {
+    pub fn has_trigger(&self) -> bool {
+        !self.triggers.is_empty()
+    }
+
+    pub fn trigger(&mut self, trigger: BuildTrigger) {
+        if !self.triggers.contains(&trigger) {
+            self.triggers.push(trigger)
+        }
+    }
+
     pub fn discover<P: AsRef<Path>>(path: P) -> Result<Vec<Service>> {
         let mut all = Vec::new();
 
@@ -40,6 +58,7 @@ impl Service {
                         path,
                         depsfile,
                         depsfile_location,
+                        triggers: Vec::new(),
                     };
 
                     all.push(service);
