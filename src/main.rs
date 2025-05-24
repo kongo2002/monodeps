@@ -15,6 +15,8 @@ fn main() {
     };
 
     if let Ok(svs) = service::Service::discover(&opts.target.canonicalized) {
-        println!("{:?}", svs)
+        for svc in svs {
+            println!("{}", svc)
+        }
     }
 }

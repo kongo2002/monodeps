@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::path::Path;
 
 use crate::config::Depsfile;
@@ -46,6 +47,18 @@ impl Service {
             }
         }
         Ok(all)
+    }
+}
+
+impl Display for Service {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}:", self.path.canonicalized))?;
+        for dep in &self.depsfile.dependencies {
+            f.write_str("\n")?;
+            f.write_fmt(format_args!("  - {}", dep))?;
+        }
+
+        Ok(())
     }
 }
 
