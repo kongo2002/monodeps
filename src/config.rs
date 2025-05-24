@@ -45,8 +45,8 @@ where
     let mut docs = YamlLoader::load_from_str(&config_content)?;
 
     if docs.is_empty() {
-        // TODO: is this necessarily an error?
-        bail!("empty file")
+        // we just return an empty structure here which is ok
+        Ok(Yaml::from_str(""))
     } else {
         // we are only interested in the first parsed "file"
         Ok(docs.remove(0))
@@ -64,4 +64,26 @@ fn yaml_str_list(yaml: &Yaml) -> Vec<String> {
         .flat_map(|entry| entry.as_str().map(|x| x.to_owned()))
         .filter(|value| !value.is_empty())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use yaml_rust::{Yaml, YamlLoader};
+
+    use crate::config::Depsfile;
+
+    #[test]
+    fn load_config_empty() {
+        let config = Depsfile::load_from_yaml(Yaml::from_str(""));
+
+        assert_eq!(config.is_ok(), true);
+    }
+
+    #[test]
+    fn load_config_no_dependencies() {
+        let mut docs = YamlLoader::load_from_str("spec:").unwrap();
+        let config = Depsfile::load_from_yaml(docs.remove(0));
+
+        assert_eq!(config.is_ok(), true);
+    }
 }
