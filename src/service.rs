@@ -1,13 +1,15 @@
 use std::path::Path;
 
+use crate::config::Depsfile;
 use crate::path::PathInfo;
 use anyhow::Result;
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Debug)]
 pub struct Service {
-    pub depsfile: PathInfo,
     pub path: PathInfo,
+    pub depsfile: Depsfile,
+    depsfile_location: PathInfo,
 }
 
 impl Service {
@@ -31,7 +33,14 @@ impl Service {
             let is_depsfile = filename == "buildfile.yaml" || filename == "depsfile";
 
             if is_depsfile {
-                if let Some(service) = to_service(entry) {
+                if let Some((depsfile_location, path)) = get_locations(entry) {
+                    let depsfile = Depsfile::load(&depsfile_location.canonicalized)?;
+                    let service = Service {
+                        path,
+                        depsfile,
+                        depsfile_location,
+                    };
+
                     all.push(service);
                 }
             }
@@ -40,8 +49,8 @@ impl Service {
     }
 }
 
-fn to_service(entry: DirEntry) -> Option<Service> {
-    let depsfile = entry
+fn get_locations(entry: DirEntry) -> Option<(PathInfo, PathInfo)> {
+    let depsfile_location = entry
         .path()
         .to_str()
         .and_then(|p| PathInfo::new(p.to_string()).ok())?;
@@ -49,7 +58,7 @@ fn to_service(entry: DirEntry) -> Option<Service> {
     let path_buf = entry.into_path();
     let path = path_buf.parent().and_then(to_pathinfo)?;
 
-    Some(Service { depsfile, path })
+    Some((depsfile_location, path))
 }
 
 fn to_pathinfo(p: &Path) -> Option<PathInfo> {

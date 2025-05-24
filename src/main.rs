@@ -1,6 +1,7 @@
 use self::cli::Opts;
 
 mod cli;
+mod config;
 mod path;
 mod service;
 
