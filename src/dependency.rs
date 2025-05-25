@@ -58,11 +58,14 @@ pub fn resolve(
         .collect())
 }
 
-fn check_direct_dependencies(
+fn check_direct_dependencies<T>(
     services: &mut HashMap<String, Service>,
     changed_files: &Vec<PathInfo>,
-    trigger: BuildTrigger,
-) -> Result<Vec<PathInfo>> {
+    trigger: T,
+) -> Result<Vec<PathInfo>>
+where
+    T: Fn(String) -> BuildTrigger,
+{
     let mut changed = Vec::new();
 
     for (_, service) in &mut *services {
@@ -74,7 +77,7 @@ fn check_direct_dependencies(
             for dep in &service.depsfile.dependencies {
                 if dep.is_match(&changed_file.canonicalized) {
                     changed.push(service.path.clone());
-                    service.trigger(trigger.clone());
+                    service.trigger(trigger(changed_file.path.clone()));
 
                     // we found _some_ dependency on that service, continue with next one
                     break 'outer;

@@ -9,8 +9,8 @@ use walkdir::{DirEntry, WalkDir};
 #[derive(Debug, Clone, PartialEq)]
 pub enum BuildTrigger {
     FileChange,
-    Dependency,
-    PeerDependency,
+    Dependency(String),
+    PeerDependency(String),
     AutoDiscovery,
 }
 
