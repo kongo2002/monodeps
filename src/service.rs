@@ -1,23 +1,26 @@
 use std::fmt::Display;
 use std::path::Path;
 
-use crate::config::Depsfile;
+use crate::cli::Opts;
+use crate::config::{DepPattern, Depsfile};
 use crate::path::PathInfo;
 use anyhow::Result;
 use walkdir::{DirEntry, WalkDir};
 
+mod go;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum BuildTrigger {
     FileChange,
-    Dependency(String),
-    PeerDependency(String),
-    AutoDiscovery,
+    Dependency(String, bool),
+    PeerDependency(String, bool),
 }
 
 #[derive(Debug)]
 pub struct Service {
     pub path: PathInfo,
     pub depsfile: Depsfile,
+    pub auto_dependencies: Vec<DepPattern>,
     triggers: Vec<BuildTrigger>,
 }
 
@@ -32,7 +35,8 @@ impl Service {
         }
     }
 
-    pub fn discover(root_dir: &str) -> Result<Vec<Service>> {
+    pub fn discover(opts: &Opts) -> Result<Vec<Service>> {
+        let root_dir = &opts.target.canonicalized;
         let mut all = Vec::new();
 
         let walker = WalkDir::new(root_dir)
@@ -54,9 +58,19 @@ impl Service {
             if is_depsfile {
                 if let Some((depsfile_location, path)) = get_locations(entry, root_dir) {
                     let depsfile = Depsfile::load(&depsfile_location.canonicalized, root_dir)?;
+
+                    let mut auto_dependencies = Vec::new();
+
+                    if !opts.config.auto_discovery.go.package_prefixes.is_empty() {
+                        auto_dependencies.extend(go::dependencies(&path.canonicalized, &opts)?);
+                    }
+
+                    println!("auto disc: {}", auto_dependencies.len());
+
                     let service = Service {
                         path,
                         depsfile,
+                        auto_dependencies,
                         triggers: Vec::new(),
                     };
 

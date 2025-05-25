@@ -1,11 +1,12 @@
 use anyhow::Result;
 use getopts::Options;
 
+use crate::config::Config;
 use crate::path::PathInfo;
 
 pub struct Opts {
     pub target: PathInfo,
-    pub config: Option<String>,
+    pub config: Config,
 }
 
 impl Opts {
@@ -27,7 +28,12 @@ impl Opts {
 
         let target_dir = matches.opt_str("t").unwrap_or(".".to_owned());
         let target = PathInfo::new(&target_dir, "")?;
-        let config = matches.opt_str("c");
+        let config_path = matches.opt_str("c");
+
+        let config = match config_path {
+            Some(path) => Config::new(&path)?,
+            None => Default::default(),
+        };
 
         Ok(Self { target, config })
     }

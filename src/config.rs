@@ -7,6 +7,37 @@ use yaml_rust::{Yaml, YamlLoader};
 
 use crate::path::PathInfo;
 
+#[derive(Default)]
+pub struct Config {
+    pub auto_discovery: AutoDiscoveryConfig,
+}
+
+#[derive(Default)]
+pub struct AutoDiscoveryConfig {
+    pub go: GoDepsConfig,
+}
+
+#[derive(Default)]
+pub struct GoDepsConfig {
+    pub package_prefixes: Vec<String>,
+}
+
+impl Config {
+    pub fn new(path: &str) -> Result<Config> {
+        let yaml = load_yaml(path)?;
+
+        let auto_disc = &yaml["auto_discovery"];
+        let go_disc = &auto_disc["go"];
+        let package_prefixes = yaml_str_list(&go_disc["package_prefixes"]);
+
+        Ok(Config {
+            auto_discovery: AutoDiscoveryConfig {
+                go: GoDepsConfig { package_prefixes },
+            },
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct DepPattern {
     raw: PathInfo,

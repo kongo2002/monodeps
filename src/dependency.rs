@@ -64,7 +64,7 @@ fn check_direct_dependencies<T>(
     trigger: T,
 ) -> Result<Vec<PathInfo>>
 where
-    T: Fn(String) -> BuildTrigger,
+    T: Fn(String, bool) -> BuildTrigger,
 {
     let mut changed = Vec::new();
 
@@ -77,7 +77,17 @@ where
             for dep in &service.depsfile.dependencies {
                 if dep.is_match(&changed_file.canonicalized) {
                     changed.push(service.path.clone());
-                    service.trigger(trigger(changed_file.path.clone()));
+                    service.trigger(trigger(changed_file.path.clone(), false));
+
+                    // we found _some_ dependency on that service, continue with next one
+                    break 'outer;
+                }
+            }
+
+            for dep in &service.auto_dependencies {
+                if dep.is_match(&changed_file.canonicalized) {
+                    changed.push(service.path.clone());
+                    service.trigger(trigger(changed_file.path.clone(), true));
 
                     // we found _some_ dependency on that service, continue with next one
                     break 'outer;
