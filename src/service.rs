@@ -18,7 +18,6 @@ pub enum BuildTrigger {
 pub struct Service {
     pub path: PathInfo,
     pub depsfile: Depsfile,
-    depsfile_location: PathInfo,
     triggers: Vec<BuildTrigger>,
 }
 
@@ -58,7 +57,6 @@ impl Service {
                     let service = Service {
                         path,
                         depsfile,
-                        depsfile_location,
                         triggers: Vec::new(),
                     };
 
