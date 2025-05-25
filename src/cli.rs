@@ -32,7 +32,10 @@ impl Opts {
 
         let config = match config_path {
             Some(path) => Config::new(&path)?,
-            None => Default::default(),
+            None => {
+                // try default location in current directory
+                Config::new("./.monodeps.yaml").unwrap_or_default()
+            }
         };
 
         Ok(Self { target, config })

@@ -58,33 +58,41 @@ where
                 continue;
             }
 
-            let parts: Vec<_> = line.splitn(3, "\"").collect();
-            if parts.len() != 3 {
-                continue;
+            if let Some(import) = extract_from_line(&line, config) {
+                imports.push(import);
             }
-
-            let import = parts[1].to_string();
-            if let Some(found) = config
-                .package_prefixes
-                .iter()
-                .flat_map(|module_prefix| {
-                    if import.starts_with(module_prefix) {
-                        let stripped = import.trim_start_matches(module_prefix).trim_matches('/');
-                        Some(stripped)
-                    } else {
-                        None
-                    }
-                })
-                .next()
-            {
-                imports.push(found.to_string());
+        } else if line.starts_with("import (") {
+            in_imports = true;
+        } else if line.starts_with("import") {
+            if let Some(import) = extract_from_line(&line, config) {
+                imports.push(import);
             }
-        } else {
-            in_imports = line.starts_with("import (");
         }
     }
 
     Ok(imports)
+}
+
+fn extract_from_line(line: &str, config: &GoDepsConfig) -> Option<String> {
+    let parts: Vec<_> = line.splitn(3, "\"").collect();
+    if parts.len() != 3 {
+        return None;
+    }
+
+    let import = parts[1].to_string();
+    config
+        .package_prefixes
+        .iter()
+        .flat_map(|module_prefix| {
+            if import.starts_with(module_prefix) {
+                let stripped = import.trim_start_matches(module_prefix).trim_matches('/');
+                Some(stripped)
+            } else {
+                None
+            }
+        })
+        .next()
+        .map(String::from)
 }
 
 fn read_lines<P>(filename: P) -> Result<Lines<BufReader<File>>>
@@ -93,4 +101,51 @@ where
 {
     let file = File::open(filename)?;
     Ok(BufReader::new(file).lines())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::find_imports;
+
+    const GO_IMPORT01: &str = include_str!("../../tests/go_import01.go");
+    const GO_IMPORT02: &str = include_str!("../../tests/go_import02.go");
+
+    #[test]
+    fn grouped_imports_with_matching_prefix() {
+        let imports = find_imports(
+            GO_IMPORT01.lines().map(String::from),
+            &crate::config::GoDepsConfig {
+                package_prefixes: vec![String::from("dev.azure.com/foo/bar")],
+            },
+        )
+        .unwrap();
+
+        assert_eq!(imports, vec!["pkg/some", "pkg/retry"]);
+    }
+
+    #[test]
+    fn grouped_imports_without_matching_prefix() {
+        let imports = find_imports(
+            GO_IMPORT01.lines().map(String::from),
+            &crate::config::GoDepsConfig {
+                package_prefixes: vec![String::from("dev.azure.com/bar/foo")],
+            },
+        )
+        .unwrap();
+
+        assert_eq!(imports.len(), 0);
+    }
+
+    #[test]
+    fn single_imports_with_matching_prefix() {
+        let imports = find_imports(
+            GO_IMPORT02.lines().map(String::from),
+            &crate::config::GoDepsConfig {
+                package_prefixes: vec![String::from("dev.azure.com/foo/bar")],
+            },
+        )
+        .unwrap();
+
+        assert_eq!(imports, vec!["pkg/some", "pkg/retry"]);
+    }
 }
