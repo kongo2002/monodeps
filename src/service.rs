@@ -16,6 +16,26 @@ pub enum BuildTrigger {
     PeerDependency(String, bool),
 }
 
+impl Display for BuildTrigger {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BuildTrigger::FileChange => f.write_str("FileChange"),
+            BuildTrigger::Dependency(dep, true) => {
+                f.write_fmt(format_args!("Auto-Dependency({})", dep))
+            }
+            BuildTrigger::Dependency(dep, false) => {
+                f.write_fmt(format_args!("Dependency({})", dep))
+            }
+            BuildTrigger::PeerDependency(dep, true) => {
+                f.write_fmt(format_args!("Auto-Peer-Dependency({})", dep))
+            }
+            BuildTrigger::PeerDependency(dep, false) => {
+                f.write_fmt(format_args!("Peer-Dependency({})", dep))
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Service {
     pub path: PathInfo,
@@ -91,7 +111,7 @@ impl Display for Service {
             if idx > 0 {
                 f.write_str(",")?;
             }
-            f.write_fmt(format_args!("{:?}", trigger))?;
+            f.write_fmt(format_args!("{}", trigger))?;
             idx += 1;
         }
         f.write_str("]")?;
