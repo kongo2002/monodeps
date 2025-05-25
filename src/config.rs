@@ -81,9 +81,25 @@ fn to_glob_regex(pattern: &str) -> Result<Regex> {
     Ok(rgx)
 }
 
+#[derive(Debug, PartialEq)]
+pub enum Language {
+    Golang,
+    Unknown,
+}
+
+impl From<&str> for Language {
+    fn from(value: &str) -> Self {
+        match value {
+            "golang" => Language::Golang,
+            _ => Language::Unknown,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Depsfile {
     pub dependencies: Vec<DepPattern>,
+    pub language: Language,
 }
 
 impl Depsfile {
@@ -103,13 +119,19 @@ impl Depsfile {
         let depends_on = &spec["dependsOn"];
         let dep_patterns = yaml_str_list(depends_on);
 
+        let metadata = &config_yaml["metadata"];
+        let language = metadata["builder"].as_str().unwrap_or("").into();
+
         // TODO: report/warn on invalid patterns?
         let dependencies = dep_patterns
             .into_iter()
             .flat_map(|dep| DepPattern::new(&dep, root_dir))
             .collect();
 
-        Ok(Depsfile { dependencies })
+        Ok(Depsfile {
+            dependencies,
+            language,
+        })
     }
 }
 

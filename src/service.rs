@@ -2,7 +2,7 @@ use std::fmt::Display;
 use std::path::Path;
 
 use crate::cli::Opts;
-use crate::config::{DepPattern, Depsfile};
+use crate::config::{DepPattern, Depsfile, Language};
 use crate::path::PathInfo;
 use anyhow::Result;
 use walkdir::{DirEntry, WalkDir};
@@ -81,11 +81,11 @@ impl Service {
 
                     let mut auto_dependencies = Vec::new();
 
-                    if !opts.config.auto_discovery.go.package_prefixes.is_empty() {
+                    if depsfile.language == Language::Golang
+                        && !opts.config.auto_discovery.go.package_prefixes.is_empty()
+                    {
                         auto_dependencies.extend(go::dependencies(&path.canonicalized, &opts)?);
                     }
-
-                    println!("auto disc: {}", auto_dependencies.len());
 
                     let service = Service {
                         path,
