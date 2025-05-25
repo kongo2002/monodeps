@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::path::Path;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use regex::Regex;
 use yaml_rust::{Yaml, YamlLoader};
 
@@ -15,11 +15,8 @@ pub struct DepPattern {
 
 impl DepPattern {
     pub fn new(dependency: &str, root_dir: &str) -> Result<Self> {
-        let pattern = if dependency.contains("*") {
-            // TODO: sanitize other regex special characters, e.g. '.'
-            let prepared = dependency.replace("*", ".*");
-            let rgx = Regex::new(&prepared)?;
-            Some(rgx)
+        let pattern = if dependency.contains(&['?', '*']) {
+            Some(to_glob_regex(dependency)?)
         } else {
             None
         };
@@ -40,6 +37,17 @@ impl Display for DepPattern {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.raw.path)
     }
+}
+
+fn to_glob_regex(pattern: &str) -> Result<Regex> {
+    let prepared = pattern
+        .replace(".", "\\.")
+        .replace("**", ".+")
+        .replace("*", "[^/\\\\]+")
+        .replace("?", ".");
+
+    let rgx = Regex::new(&prepared)?;
+    Ok(rgx)
 }
 
 #[derive(Debug)]
@@ -114,6 +122,8 @@ mod tests {
 
     use crate::config::Depsfile;
 
+    use super::DepPattern;
+
     #[test]
     fn load_config_empty() {
         let config = Depsfile::load_from_yaml(Yaml::from_str(""), "");
@@ -127,5 +137,45 @@ mod tests {
         let config = Depsfile::load_from_yaml(docs.remove(0), "");
 
         assert_eq!(config.is_ok(), true);
+    }
+
+    #[test]
+    fn dep_pattern_basic() {
+        let pat = DepPattern::new("domains/foo", ".").unwrap();
+
+        assert_eq!(pat.is_match("./domains/foo/something"), true);
+        assert_eq!(pat.is_match("./domains/else/foo"), false);
+    }
+
+    #[test]
+    fn dep_pattern_wildcard() {
+        let pat = DepPattern::new("domains/foo/services/*/proto", ".").unwrap();
+
+        assert_eq!(pat.is_match("./domains/foo/services/bar/proto"), true);
+        assert_eq!(pat.is_match("./domains/bar/services/bar/proto"), false);
+    }
+
+    #[test]
+    fn dep_pattern_dot() {
+        let pat = DepPattern::new("domains/foo/services/.hidden", ".").unwrap();
+
+        assert_eq!(pat.is_match("./domains/foo/services/.hidden/stuff"), true);
+        assert_eq!(pat.is_match("./domains/foo/services/xhidden/stuff"), false);
+    }
+
+    #[test]
+    fn dep_pattern_wildcard_dot() {
+        let pat = DepPattern::new("domains/foo/*/.hidden", ".").unwrap();
+
+        assert_eq!(pat.is_match("./domains/foo/services/.hidden/stuff"), true);
+        assert_eq!(pat.is_match("./domains/foo/services/xhidden/stuff"), false);
+    }
+
+    #[test]
+    fn dep_pattern_wildcard_question_mark() {
+        let pat = DepPattern::new("domains/foo/??hidden", ".").unwrap();
+
+        assert_eq!(pat.is_match("./domains/foo/.xhidden/stuff"), true);
+        assert_eq!(pat.is_match("./domains/foo/.hidden/stuff"), false);
     }
 }

@@ -41,7 +41,8 @@ pub fn resolve(
         BuildTrigger::Dependency,
     )?);
 
-    // 3. now gather all services that depend on the services that we already found
+    // 3. now gather all services that depend on the services that we already found.
+    // we repeat this until we find no additional peer dependencies
     loop {
         updated =
             check_direct_dependencies(&mut service_map, &updated, BuildTrigger::PeerDependency)?;
@@ -50,7 +51,7 @@ pub fn resolve(
         }
     }
 
-    // 3. return all services that have _some_ dependency
+    // 4. return all services that have _some_ dependency
     Ok(service_map
         .into_iter()
         .filter_map(|(_, svc)| if svc.has_trigger() { Some(svc) } else { None })
@@ -73,15 +74,12 @@ fn check_direct_dependencies(
             for dep in &service.depsfile.dependencies {
                 if dep.is_match(&changed_file.canonicalized) {
                     changed.push(service.path.clone());
+                    service.trigger(trigger.clone());
+
+                    // we found _some_ dependency on that service, continue with next one
                     break 'outer;
                 }
             }
-        }
-    }
-
-    for info in &changed {
-        if let Some(entry) = services.get_mut(&info.canonicalized) {
-            entry.trigger(trigger.clone());
         }
     }
 
