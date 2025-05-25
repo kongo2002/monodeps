@@ -16,6 +16,7 @@ pub struct Config {
 #[derive(Default)]
 pub struct AutoDiscoveryConfig {
     pub go: GoDepsConfig,
+    pub dotnet: DotnetConfig,
 }
 
 #[derive(Default)]
@@ -23,18 +24,32 @@ pub struct GoDepsConfig {
     pub package_prefixes: Vec<String>,
 }
 
+#[derive(Default)]
+pub struct DotnetConfig {
+    pub package_namespaces: Vec<String>,
+}
+
 impl Config {
     pub fn new(path: &str) -> Result<Config> {
         let yaml = load_yaml(path)?;
 
         let auto_disc = &yaml["auto_discovery"];
-        let go_disc = &auto_disc["go"];
-        let package_prefixes = yaml_str_list(&go_disc["package_prefixes"]);
         let global_dependencies = yaml_str_list(&yaml["global_dependencies"]);
+
+        let go_disc = &auto_disc["go"];
+        let go_package_prefixes = yaml_str_list(&go_disc["package_prefixes"]);
+
+        let dotnet_disc = &auto_disc["dotnet"];
+        let dotnet_package_namespaces = yaml_str_list(&dotnet_disc["package_namespaces"]);
 
         Ok(Config {
             auto_discovery: AutoDiscoveryConfig {
-                go: GoDepsConfig { package_prefixes },
+                go: GoDepsConfig {
+                    package_prefixes: go_package_prefixes,
+                },
+                dotnet: DotnetConfig {
+                    package_namespaces: dotnet_package_namespaces,
+                },
             },
             global_dependencies,
         })
@@ -43,6 +58,7 @@ impl Config {
     pub fn auto_discovery_enabled(&self, language: &Language) -> bool {
         match language {
             Language::Golang => !self.auto_discovery.go.package_prefixes.is_empty(),
+            Language::Dotnet => !self.auto_discovery.dotnet.package_namespaces.is_empty(),
             Language::Unknown => false,
         }
     }
@@ -94,6 +110,7 @@ fn to_glob_regex(pattern: &str) -> Result<Regex> {
 #[derive(Debug, PartialEq)]
 pub enum Language {
     Golang,
+    Dotnet,
     Unknown,
 }
 
@@ -101,6 +118,7 @@ impl From<&str> for Language {
     fn from(value: &str) -> Self {
         match value {
             "golang" => Language::Golang,
+            "dotnet" => Language::Dotnet,
             _ => Language::Unknown,
         }
     }

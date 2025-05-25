@@ -1,4 +1,6 @@
 use std::fmt::Display;
+use std::fs::File;
+use std::io::{BufRead, BufReader, Lines};
 use std::path::Path;
 
 use crate::cli::Opts;
@@ -7,6 +9,7 @@ use crate::path::PathInfo;
 use anyhow::Result;
 use walkdir::{DirEntry, WalkDir};
 
+mod dotnet;
 mod go;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -61,6 +64,12 @@ impl Service {
         let root_dir = &opts.target.canonicalized;
         let mut all = Vec::new();
 
+        let dotnet_analyzer = if opts.config.auto_discovery_enabled(&Language::Dotnet) {
+            dotnet::DotnetAnalyzer::new().ok()
+        } else {
+            None
+        };
+
         for entry in non_hidden_files(root_dir) {
             let filename = entry.file_name().to_str().unwrap_or("").to_lowercase();
             let is_depsfile = filename == "buildfile.yaml" || filename == "depsfile";
@@ -74,6 +83,11 @@ impl Service {
                     if opts.config.auto_discovery_enabled(&depsfile.language) {
                         if depsfile.language == Language::Golang {
                             auto_dependencies.extend(go::dependencies(&path.canonicalized, &opts)?);
+                        } else if depsfile.language == Language::Dotnet {
+                            if let Some(analyzer) = &dotnet_analyzer {
+                                auto_dependencies
+                                    .extend(analyzer.dependencies(&path.canonicalized, &opts)?);
+                            }
                         }
                     }
 
@@ -143,4 +157,12 @@ fn to_pathinfo(p: &Path, root_dir: &str) -> Option<PathInfo> {
     let path = p.to_str()?;
 
     PathInfo::new(path, root_dir).ok()
+}
+
+fn read_lines<P>(filename: P) -> Result<Lines<BufReader<File>>>
+where
+    P: AsRef<Path>,
+{
+    let file = File::open(filename)?;
+    Ok(BufReader::new(file).lines())
 }

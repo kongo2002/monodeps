@@ -1,6 +1,4 @@
 use std::collections::HashSet;
-use std::fs::File;
-use std::io::{BufRead, BufReader, Lines};
 use std::path::Path;
 
 use anyhow::Result;
@@ -8,7 +6,7 @@ use anyhow::Result;
 use crate::cli::Opts;
 use crate::config::{DepPattern, GoDepsConfig};
 
-use super::non_hidden_files;
+use super::{non_hidden_files, read_lines};
 
 const SCAN_MAX_LINES: usize = 300;
 
@@ -90,14 +88,6 @@ fn extract_from_line(line: &str, config: &GoDepsConfig) -> Option<String> {
         })
         .next()
         .map(String::from)
-}
-
-fn read_lines<P>(filename: P) -> Result<Lines<BufReader<File>>>
-where
-    P: AsRef<Path>,
-{
-    let file = File::open(filename)?;
-    Ok(BufReader::new(file).lines())
 }
 
 #[cfg(test)]
