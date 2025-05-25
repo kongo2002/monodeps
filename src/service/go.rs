@@ -9,6 +9,8 @@ use walkdir::WalkDir;
 use crate::cli::Opts;
 use crate::config::{DepPattern, GoDepsConfig};
 
+const SCAN_MAX_LINES: usize = 300;
+
 pub(super) fn dependencies<P>(dir: P, config: &Opts) -> Result<Vec<DepPattern>>
 where
     P: AsRef<Path>,
@@ -50,8 +52,14 @@ where
 {
     let mut imports = Vec::new();
     let mut in_imports = false;
+    let mut scanned_lines = 0usize;
 
     for line in lines {
+        scanned_lines += 1;
+        if scanned_lines > SCAN_MAX_LINES {
+            break;
+        }
+
         if in_imports {
             if line.contains(")") {
                 in_imports = false;
