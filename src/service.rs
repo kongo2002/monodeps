@@ -59,19 +59,7 @@ impl Service {
         let root_dir = &opts.target.canonicalized;
         let mut all = Vec::new();
 
-        let walker = WalkDir::new(root_dir)
-            .into_iter()
-            // filter hidden files/directories
-            .filter_entry(|e| {
-                !e.file_name()
-                    .to_str()
-                    .map(|s| s.starts_with("."))
-                    .unwrap_or(false)
-            })
-            // skip errors (e.g. non permission directories)
-            .filter_map(|e| e.ok());
-
-        for entry in walker {
+        for entry in non_hidden_files(root_dir) {
             let filename = entry.file_name().to_str().unwrap_or("").to_lowercase();
             let is_depsfile = filename == "buildfile.yaml" || filename == "depsfile";
 
@@ -81,10 +69,10 @@ impl Service {
 
                     let mut auto_dependencies = Vec::new();
 
-                    if depsfile.language == Language::Golang
-                        && !opts.config.auto_discovery.go.package_prefixes.is_empty()
-                    {
-                        auto_dependencies.extend(go::dependencies(&path.canonicalized, &opts)?);
+                    if opts.config.auto_discovery_enabled(&depsfile.language) {
+                        if depsfile.language == Language::Golang {
+                            auto_dependencies.extend(go::dependencies(&path.canonicalized, &opts)?);
+                        }
                     }
 
                     let service = Service {
@@ -100,6 +88,23 @@ impl Service {
         }
         Ok(all)
     }
+}
+
+fn non_hidden_files<P>(dir: P) -> impl IntoIterator<Item = DirEntry>
+where
+    P: AsRef<Path>,
+{
+    WalkDir::new(dir)
+        .into_iter()
+        // filter hidden files/directories
+        .filter_entry(|e| {
+            !e.file_name()
+                .to_str()
+                .map(|s| s.starts_with("."))
+                .unwrap_or(false)
+        })
+        // skip errors (e.g. non permission directories)
+        .filter_map(|e| e.ok())
 }
 
 impl Display for Service {

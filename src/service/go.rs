@@ -4,10 +4,11 @@ use std::io::{BufRead, BufReader, Lines};
 use std::path::Path;
 
 use anyhow::Result;
-use walkdir::WalkDir;
 
 use crate::cli::Opts;
 use crate::config::{DepPattern, GoDepsConfig};
+
+use super::non_hidden_files;
 
 const SCAN_MAX_LINES: usize = 300;
 
@@ -15,21 +16,9 @@ pub(super) fn dependencies<P>(dir: P, config: &Opts) -> Result<Vec<DepPattern>>
 where
     P: AsRef<Path>,
 {
-    let walker = WalkDir::new(dir)
-        .into_iter()
-        // filter hidden files/directories
-        .filter_entry(|e| {
-            !e.file_name()
-                .to_str()
-                .map(|s| s.starts_with("."))
-                .unwrap_or(false)
-        })
-        // skip errors (e.g. non permission directories)
-        .filter_map(|e| e.ok());
-
     let mut collected_imports = HashSet::new();
 
-    for entry in walker {
+    for entry in non_hidden_files(&dir) {
         let filename = entry.file_name().to_str().unwrap_or("").to_lowercase();
         if !filename.ends_with(".go") {
             continue;

@@ -36,6 +36,13 @@ impl Config {
             },
         })
     }
+
+    pub fn auto_discovery_enabled(&self, language: &Language) -> bool {
+        match language {
+            Language::Golang => !self.auto_discovery.go.package_prefixes.is_empty(),
+            Language::Unknown => false,
+        }
+    }
 }
 
 #[derive(Debug)]
