@@ -1,26 +1,46 @@
 use std::collections::HashMap;
 
 use crate::cli::Opts;
+use crate::config::DepPattern;
 use crate::path::PathInfo;
 use crate::service::{BuildTrigger, Service};
 use anyhow::{Result, anyhow};
 
 pub fn resolve(
-    services: Vec<Service>,
+    mut services: Vec<Service>,
     changed_files: Vec<String>,
     opts: &Opts,
 ) -> Result<Vec<Service>> {
-    let mut service_map: HashMap<String, Service> = services
-        .into_iter()
-        .map(|svc| (svc.path.canonicalized.clone(), svc))
-        .collect();
-
-    // 1. collect all services that are directly associated to the changed files
     let canon_changed_files: Vec<_> = changed_files
         .into_iter()
         .flat_map(|p| PathInfo::new(&p, &opts.target.canonicalized))
         .collect();
 
+    // 1. check global dependencies
+    // if any changed file matches any global dependency every service will be returned
+    for global_dep in opts
+        .config
+        .global_dependencies
+        .iter()
+        .flat_map(|d| DepPattern::new(&d, &opts.target.canonicalized))
+    {
+        if canon_changed_files
+            .iter()
+            .any(|f| global_dep.is_match(&f.canonicalized))
+        {
+            services
+                .iter_mut()
+                .for_each(|svc| svc.trigger(BuildTrigger::GlobalDependency));
+            return Ok(services);
+        }
+    }
+
+    let mut service_map: HashMap<String, Service> = services
+        .into_iter()
+        .map(|svc| (svc.path.canonicalized.clone(), svc))
+        .collect();
+
+    // 2. collect all services that are directly associated to the changed files
     let mut updated = Vec::new();
 
     for changed_file in &canon_changed_files {
@@ -34,14 +54,14 @@ pub fn resolve(
         }
     }
 
-    // 2. collect all services that have direct dependencies on the changed files
+    // 3. collect all services that have direct dependencies on the changed files
     updated.extend(check_direct_dependencies(
         &mut service_map,
         &canon_changed_files,
         BuildTrigger::Dependency,
     )?);
 
-    // 3. now gather all services that depend on the services that we already found.
+    // 4. now gather all services that depend on the services that we already found.
     // we repeat this until we find no additional peer dependencies
     loop {
         updated =
@@ -51,7 +71,7 @@ pub fn resolve(
         }
     }
 
-    // 4. return all services that have _some_ dependency
+    // 5. return all services that have _some_ dependency
     Ok(service_map
         .into_iter()
         .filter_map(|(_, svc)| if svc.has_trigger() { Some(svc) } else { None })

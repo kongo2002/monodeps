@@ -10,6 +10,7 @@ use crate::path::PathInfo;
 #[derive(Default)]
 pub struct Config {
     pub auto_discovery: AutoDiscoveryConfig,
+    pub global_dependencies: Vec<String>,
 }
 
 #[derive(Default)]
@@ -29,11 +30,13 @@ impl Config {
         let auto_disc = &yaml["auto_discovery"];
         let go_disc = &auto_disc["go"];
         let package_prefixes = yaml_str_list(&go_disc["package_prefixes"]);
+        let global_dependencies = yaml_str_list(&yaml["global_dependencies"]);
 
         Ok(Config {
             auto_discovery: AutoDiscoveryConfig {
                 go: GoDepsConfig { package_prefixes },
             },
+            global_dependencies,
         })
     }
 

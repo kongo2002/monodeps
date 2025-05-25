@@ -14,6 +14,7 @@ pub enum BuildTrigger {
     FileChange,
     Dependency(String, bool),
     PeerDependency(String, bool),
+    GlobalDependency,
 }
 
 impl Display for BuildTrigger {
@@ -32,6 +33,7 @@ impl Display for BuildTrigger {
             BuildTrigger::PeerDependency(dep, false) => {
                 f.write_fmt(format_args!("Peer-Dependency({})", dep))
             }
+            BuildTrigger::GlobalDependency => f.write_str("Global"),
         }
     }
 }
