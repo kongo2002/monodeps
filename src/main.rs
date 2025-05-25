@@ -13,7 +13,7 @@ fn main() {
     let changed_files = bail_out(collect_changed_files());
 
     if let Ok(svs) = service::Service::discover(&opts.target.canonicalized) {
-        let svs = dependency::resolve(svs, changed_files).unwrap();
+        let svs = dependency::resolve(svs, changed_files, &opts).unwrap();
         for svc in svs {
             println!("{}", svc)
         }

@@ -6,5 +6,6 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0.98"
 getopts = "0.2.21"
+regex = "1.11.1"
 walkdir = "2.5.0"
 yaml-rust = "0.4.5"

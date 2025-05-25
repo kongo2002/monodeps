@@ -26,7 +26,7 @@ impl Opts {
         }
 
         let target_dir = matches.opt_str("t").unwrap_or(".".to_owned());
-        let target = PathInfo::new(target_dir)?;
+        let target = PathInfo::new(&target_dir, "")?;
         let config = matches.opt_str("c");
 
         Ok(Self { target, config })

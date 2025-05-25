@@ -1,32 +1,74 @@
 use std::fmt::Display;
 use std::path::Path;
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
+use regex::Regex;
 use yaml_rust::{Yaml, YamlLoader};
+
+use crate::path::PathInfo;
+
+#[derive(Debug)]
+pub struct DepPattern {
+    raw: PathInfo,
+    pattern: Option<Regex>,
+}
+
+impl DepPattern {
+    pub fn new(dependency: &str, root_dir: &str) -> Result<Self> {
+        let pattern = if dependency.contains("*") {
+            // TODO: sanitize other regex special characters, e.g. '.'
+            let prepared = dependency.replace("*", ".*");
+            let rgx = Regex::new(&prepared)?;
+            Some(rgx)
+        } else {
+            None
+        };
+        let raw = PathInfo::new(dependency, root_dir)?;
+
+        Ok(Self { raw, pattern })
+    }
+
+    pub fn is_match(&self, path: &str) -> bool {
+        match &self.pattern {
+            Some(patt) => patt.is_match(path),
+            None => path.starts_with(&self.raw.canonicalized),
+        }
+    }
+}
+
+impl Display for DepPattern {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.raw.path)
+    }
+}
 
 #[derive(Debug)]
 pub struct Depsfile {
-    pub dependencies: Vec<String>,
+    pub dependencies: Vec<DepPattern>,
 }
 
 impl Depsfile {
     /// Attempt to load `Config` from the given file name that
     /// is expected to be a YAML file.
-    pub fn load<P>(file: P) -> Result<Depsfile>
+    pub fn load<P>(file: P, root_dir: &str) -> Result<Depsfile>
     where
         P: AsRef<Path> + Display,
     {
         let config_yaml = load_yaml(file)?;
-        Depsfile::load_from_yaml(config_yaml)
+        Depsfile::load_from_yaml(config_yaml, root_dir)
     }
 
     /// Try to parse the given `Yaml` into a valid `Config`
-    fn load_from_yaml(config_yaml: Yaml) -> Result<Depsfile> {
+    fn load_from_yaml(config_yaml: Yaml, root_dir: &str) -> Result<Depsfile> {
         let spec = &config_yaml["spec"];
         let depends_on = &spec["dependsOn"];
-        let dependencies = yaml_str_list(depends_on);
+        let dep_patterns = yaml_str_list(depends_on);
 
-        // TODO: validations
+        // TODO: report/warn on invalid patterns?
+        let dependencies = dep_patterns
+            .into_iter()
+            .flat_map(|dep| DepPattern::new(&dep, root_dir))
+            .collect();
 
         Ok(Depsfile { dependencies })
     }
@@ -74,7 +116,7 @@ mod tests {
 
     #[test]
     fn load_config_empty() {
-        let config = Depsfile::load_from_yaml(Yaml::from_str(""));
+        let config = Depsfile::load_from_yaml(Yaml::from_str(""), "");
 
         assert_eq!(config.is_ok(), true);
     }
@@ -82,7 +124,7 @@ mod tests {
     #[test]
     fn load_config_no_dependencies() {
         let mut docs = YamlLoader::load_from_str("spec:").unwrap();
-        let config = Depsfile::load_from_yaml(docs.remove(0));
+        let config = Depsfile::load_from_yaml(docs.remove(0), "");
 
         assert_eq!(config.is_ok(), true);
     }
