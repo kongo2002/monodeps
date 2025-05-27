@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader, Lines};
 use std::path::Path;
 
 use crate::cli::Opts;
-use crate::config::{DepPattern, Depsfile, Language};
+use crate::config::{DepPattern, Depsfile, DepsfileType, Language};
 use crate::path::PathInfo;
 use anyhow::Result;
 use walkdir::{DirEntry, WalkDir};
@@ -72,11 +72,16 @@ impl Service {
 
         for entry in non_hidden_files(root_dir) {
             let filename = entry.file_name().to_str().unwrap_or("").to_lowercase();
-            let is_depsfile = filename == "buildfile.yaml" || filename == "depsfile";
+            let filetype = match filename.as_str() {
+                "buildfile.yaml" => Some(DepsfileType::Buildfile),
+                "depsfile" => Some(DepsfileType::Depsfile),
+                _ => None,
+            };
 
-            if is_depsfile {
+            if let Some(valid_filetype) = filetype {
                 if let Some((depsfile_location, path)) = get_locations(entry, root_dir) {
-                    let depsfile = Depsfile::load(&depsfile_location.canonicalized, root_dir)?;
+                    let depsfile =
+                        Depsfile::load(valid_filetype, &depsfile_location.canonicalized, root_dir)?;
 
                     let mut auto_dependencies = Vec::new();
 

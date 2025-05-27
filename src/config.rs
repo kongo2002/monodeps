@@ -124,6 +124,11 @@ impl From<&str> for Language {
     }
 }
 
+pub enum DepsfileType {
+    Depsfile,
+    Buildfile,
+}
+
 #[derive(Debug)]
 pub struct Depsfile {
     pub dependencies: Vec<DepPattern>,
@@ -133,16 +138,36 @@ pub struct Depsfile {
 impl Depsfile {
     /// Attempt to load `Config` from the given file name that
     /// is expected to be a YAML file.
-    pub fn load<P>(file: P, root_dir: &str) -> Result<Depsfile>
+    pub fn load<P>(file_type: DepsfileType, file: P, root_dir: &str) -> Result<Depsfile>
     where
         P: AsRef<Path> + Display,
     {
         let config_yaml = load_yaml(file)?;
-        Depsfile::load_from_yaml(config_yaml, root_dir)
+
+        match file_type {
+            DepsfileType::Depsfile => Depsfile::depsfile_from_yaml(config_yaml, root_dir),
+            DepsfileType::Buildfile => Depsfile::buildfile_from_yaml(config_yaml, root_dir),
+        }
+    }
+
+    fn depsfile_from_yaml(config_yaml: Yaml, root_dir: &str) -> Result<Depsfile> {
+        let language = config_yaml["language"].as_str().unwrap_or("").into();
+        let dep_patterns = yaml_str_list(&config_yaml["dependencies"]);
+
+        // TODO: report/warn on invalid patterns?
+        let dependencies = dep_patterns
+            .into_iter()
+            .flat_map(|dep| DepPattern::new(&dep, root_dir))
+            .collect();
+
+        Ok(Depsfile {
+            dependencies,
+            language,
+        })
     }
 
     /// Try to parse the given `Yaml` into a valid `Config`
-    fn load_from_yaml(config_yaml: Yaml, root_dir: &str) -> Result<Depsfile> {
+    fn buildfile_from_yaml(config_yaml: Yaml, root_dir: &str) -> Result<Depsfile> {
         let spec = &config_yaml["spec"];
         let depends_on = &spec["dependsOn"];
         let dep_patterns = yaml_str_list(depends_on);
@@ -207,7 +232,7 @@ mod tests {
 
     #[test]
     fn load_config_empty() {
-        let config = Depsfile::load_from_yaml(Yaml::from_str(""), "");
+        let config = Depsfile::depsfile_from_yaml(Yaml::from_str(""), "");
 
         assert_eq!(config.is_ok(), true);
     }
@@ -215,7 +240,7 @@ mod tests {
     #[test]
     fn load_config_no_dependencies() {
         let mut docs = YamlLoader::load_from_str("spec:").unwrap();
-        let config = Depsfile::load_from_yaml(docs.remove(0), "");
+        let config = Depsfile::depsfile_from_yaml(docs.remove(0), "");
 
         assert_eq!(config.is_ok(), true);
     }
