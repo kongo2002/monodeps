@@ -90,8 +90,17 @@ impl Service {
                             auto_dependencies.extend(go::dependencies(&path.canonicalized, &opts)?);
                         } else if depsfile.language == Language::Dotnet {
                             if let Some(analyzer) = &dotnet_analyzer {
-                                auto_dependencies
-                                    .extend(analyzer.dependencies(&path.canonicalized, &opts)?);
+                                match analyzer.dependencies(&path.canonicalized, &opts) {
+                                    Ok(auto_discovered_deps) => {
+                                        auto_dependencies.extend(auto_discovered_deps)
+                                    }
+                                    Err(err) => {
+                                        eprintln!(
+                                            "failed to auto-discover dependencies from '{}': {err}",
+                                            path.canonicalized
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

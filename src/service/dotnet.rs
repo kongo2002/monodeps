@@ -36,14 +36,17 @@ impl DotnetAnalyzer {
             }
 
             let file_content = std::fs::read_to_string(entry.path())?;
-            let imports = self.extract_project_references(&file_content)?;
+
+            // the XML parser does not support UTF8 BOM
+            let bom_stripped = file_content.trim_start_matches("\u{feff}");
+            let imports = self.extract_project_references(bom_stripped)?;
 
             collected_imports.extend(imports);
         }
 
         Ok(collected_imports
             .into_iter()
-            .flat_map(|import| DepPattern::new(&import, &config.target.canonicalized))
+            .flat_map(|import| DepPattern::new(&import, dir.as_ref().to_str().unwrap()))
             .collect())
     }
 
@@ -70,12 +73,20 @@ impl DotnetAnalyzer {
 /// Convert the project file reference to the service directory
 /// e.g. '../Common.Logging/Common.Logging.csproj' -> '../Common.Logging'
 fn extract_project_dir(include: &str) -> Option<String> {
-    PathBuf::from(include)
+    let alt_separator = if std::path::MAIN_SEPARATOR_STR == "\\" {
+        "/"
+    } else {
+        "\\"
+    };
+
+    let sanitized = include.replace(alt_separator, std::path::MAIN_SEPARATOR_STR);
+    PathBuf::from(sanitized)
         .ancestors()
         .skip(1)
         .next()
         .and_then(|p| p.to_str())
         .map(|p| p.to_string())
+        .filter(|p| !p.is_empty())
 }
 
 #[cfg(test)]

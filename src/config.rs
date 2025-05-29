@@ -58,7 +58,7 @@ impl Config {
     pub fn auto_discovery_enabled(&self, language: &Language) -> bool {
         match language {
             Language::Golang => !self.auto_discovery.go.package_prefixes.is_empty(),
-            Language::Dotnet => !self.auto_discovery.dotnet.package_namespaces.is_empty(),
+            Language::Dotnet => true,
             Language::Unknown => false,
         }
     }
