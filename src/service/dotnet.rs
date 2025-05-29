@@ -9,6 +9,11 @@ use crate::config::DepPattern;
 
 use super::non_hidden_files;
 
+struct Import {
+    service_dir: String,
+    name: String,
+}
+
 pub(super) struct DotnetAnalyzer {
     proj_refs: XPath,
 }
@@ -23,15 +28,18 @@ impl DotnetAnalyzer {
         Ok(Self { proj_refs })
     }
 
-    pub fn dependencies<P>(&self, dir: P, config: &Opts) -> Result<Vec<DepPattern>>
+    pub fn dependencies<P>(&self, dir: P, opts: &Opts) -> Result<Vec<DepPattern>>
     where
         P: AsRef<Path>,
     {
         let mut collected_imports = HashSet::new();
 
         for entry in non_hidden_files(&dir) {
-            let filename = entry.file_name().to_str().unwrap_or("").to_lowercase();
-            if !filename.ends_with(".csproj") {
+            let extension = entry.path().extension();
+            if extension
+                .filter(|ext| ext.eq_ignore_ascii_case("csproj"))
+                .is_none()
+            {
                 continue;
             }
 
@@ -39,7 +47,10 @@ impl DotnetAnalyzer {
 
             // the XML parser does not support UTF8 BOM
             let bom_stripped = file_content.trim_start_matches("\u{feff}");
-            let imports = self.extract_project_references(bom_stripped)?;
+            let imports = self.extract_project_references(
+                bom_stripped,
+                &opts.config.auto_discovery.dotnet.package_namespaces,
+            )?;
 
             collected_imports.extend(imports);
         }
@@ -50,7 +61,11 @@ impl DotnetAnalyzer {
             .collect())
     }
 
-    fn extract_project_references(&self, content: &str) -> Result<Vec<String>> {
+    fn extract_project_references(
+        &self,
+        content: &str,
+        package_namespaces: &Vec<String>,
+    ) -> Result<Vec<String>> {
         let parsed_xml = sxd_document::parser::parse(content)?;
         let xml_doc = parsed_xml.as_document();
 
@@ -64,6 +79,13 @@ impl DotnetAnalyzer {
                     node.attribute()
                         .and_then(|attr| extract_project_dir(attr.value()))
                 })
+                .filter(|import| {
+                    package_namespaces.is_empty()
+                        || package_namespaces
+                            .iter()
+                            .any(|package| import.name.starts_with(package))
+                })
+                .map(|import| import.service_dir)
                 .collect(),
             _ => vec![],
         })
@@ -72,7 +94,7 @@ impl DotnetAnalyzer {
 
 /// Convert the project file reference to the service directory
 /// e.g. '../Common.Logging/Common.Logging.csproj' -> '../Common.Logging'
-fn extract_project_dir(include: &str) -> Option<String> {
+fn extract_project_dir(include: &str) -> Option<Import> {
     let alt_separator = if std::path::MAIN_SEPARATOR_STR == "\\" {
         "/"
     } else {
@@ -80,13 +102,19 @@ fn extract_project_dir(include: &str) -> Option<String> {
     };
 
     let sanitized = include.replace(alt_separator, std::path::MAIN_SEPARATOR_STR);
-    PathBuf::from(sanitized)
+
+    let path = PathBuf::from(sanitized);
+    let service_dir = path
         .ancestors()
         .skip(1)
         .next()
         .and_then(|p| p.to_str())
         .map(|p| p.to_string())
-        .filter(|p| !p.is_empty())
+        .filter(|p| !p.is_empty())?;
+
+    let name = path.file_stem()?.to_str()?.to_string();
+
+    Some(Import { service_dir, name })
 }
 
 #[cfg(test)]
@@ -97,8 +125,11 @@ mod tests {
 
     #[test]
     fn extract_references() {
+        let namespaces = vec![];
         let analyzer = DotnetAnalyzer::new().unwrap();
-        let mut extracted = analyzer.extract_project_references(CSPROJ01).unwrap();
+        let mut extracted = analyzer
+            .extract_project_references(CSPROJ01, &namespaces)
+            .unwrap();
 
         // for stable comparison
         extracted.sort();
@@ -111,5 +142,20 @@ mod tests {
                 String::from("../Common.Tracing"),
             ]
         );
+    }
+
+    #[test]
+    fn filter_references_by_namespaces() {
+        let namespaces = vec![String::from("Common.Logging")];
+        let analyzer = DotnetAnalyzer::new().unwrap();
+        let mut extracted = analyzer
+            .extract_project_references(CSPROJ01, &namespaces)
+            .unwrap();
+
+        // for stable comparison
+        extracted.sort();
+
+        assert_eq!(extracted.len(), 1, "number of project references");
+        assert_eq!(extracted, vec![String::from("../Common.Logging"),]);
     }
 }

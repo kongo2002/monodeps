@@ -44,7 +44,7 @@ pub fn resolve(
     let mut updated = Vec::new();
 
     for changed_file in &canon_changed_files {
-        if let Some(svc) = check_file_dependency(&mut service_map, changed_file)? {
+        if let Some(svc) = check_file_dependency(&mut service_map, changed_file, opts)? {
             updated.push(svc);
         } else {
             eprintln!(
@@ -122,10 +122,10 @@ where
 fn check_file_dependency(
     services: &mut HashMap<String, Service>,
     pattern: &PathInfo,
+    opts: &Opts,
 ) -> Result<Option<PathInfo>> {
     let file_path = std::path::PathBuf::from(&pattern.canonicalized);
 
-    // TODO: only walk directories until the root project directory
     for path in file_path.ancestors().skip(1) {
         let str_path = path.to_str().ok_or_else(|| {
             anyhow!(
@@ -137,6 +137,11 @@ fn check_file_dependency(
         if let Some(entry) = services.get_mut(str_path) {
             entry.trigger(BuildTrigger::FileChange);
             return Ok(Some(entry.path.clone()));
+        }
+
+        // only walk directories until the root project directory
+        if str_path == opts.target.canonicalized {
+            break;
         }
     }
 
