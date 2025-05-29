@@ -71,6 +71,23 @@ fn parse_format(input: String) -> Result<OutputFormat> {
 }
 
 fn usage(opts: &Options, exec: &str) {
-    let brief = format!("Usage: {} [OPTIONS]", exec);
+    let brief = format!(
+        r#"Usage: {} [OPTIONS]
+
+monodeps is a tool to help with change detection in mono-repository
+setups in order to determine which services or folders are candidate
+for build and publish in CI/CD environments.
+
+The program expects a list of changed/updated files on STDIN. These
+files are the base for the change detection algorithm. The program
+output will be all services/folders that have to be built, based on the
+respective Depsfile files in each service folder.
+
+For instance, you could pipe the git diff output to monodeps:
+
+    git diff-tree --no-commit-id --name-only HEAD -r | monodeps"#,
+        exec
+    );
+
     print!("{}", opts.usage(&brief));
 }
