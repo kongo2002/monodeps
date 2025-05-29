@@ -46,7 +46,7 @@ impl DotnetAnalyzer {
 
         Ok(collected_imports
             .into_iter()
-            .flat_map(|import| DepPattern::new(&import, dir.as_ref().to_str().unwrap()))
+            .flat_map(|import| DepPattern::new(&import, &dir))
             .collect())
     }
 

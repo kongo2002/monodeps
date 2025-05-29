@@ -9,8 +9,11 @@ pub struct PathInfo {
 }
 
 impl PathInfo {
-    pub fn new(path: &str, root_dir: &str) -> Result<Self> {
-        let base = Path::new(root_dir).join(path);
+    pub fn new<P>(path: &str, root_dir: P) -> Result<Self>
+    where
+        P: AsRef<Path>,
+    {
+        let base = Path::new(root_dir.as_ref()).join(path);
         let canonicalized = canonicalize(&base).or_else(|_| {
             base.to_str()
                 .map(|x| x.to_string())

@@ -71,7 +71,10 @@ pub struct DepPattern {
 }
 
 impl DepPattern {
-    pub fn new(dependency: &str, root_dir: &str) -> Result<Self> {
+    pub fn new<P>(dependency: &str, root_dir: P) -> Result<Self>
+    where
+        P: AsRef<Path>,
+    {
         let pattern = if dependency.contains(&['?', '*']) {
             Some(to_glob_regex(dependency)?)
         } else {
