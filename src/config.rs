@@ -145,16 +145,19 @@ impl Depsfile {
     where
         P: AsRef<Path> + Display,
     {
-        let config_yaml = load_yaml(file)?;
+        let config_yaml = load_yaml(&file)?;
 
         match file_type {
-            DepsfileType::Depsfile => Depsfile::depsfile_from_yaml(config_yaml, root_dir),
-            DepsfileType::Buildfile => Depsfile::buildfile_from_yaml(config_yaml, root_dir),
+            DepsfileType::Depsfile => Depsfile::depsfile_from_yaml(config_yaml, file, root_dir),
+            DepsfileType::Buildfile => Depsfile::buildfile_from_yaml(config_yaml, file, root_dir),
         }
     }
 
-    fn depsfile_from_yaml(config_yaml: Yaml, root_dir: &str) -> Result<Depsfile> {
-        let language = config_yaml["language"].as_str().unwrap_or("").into();
+    fn depsfile_from_yaml<P>(config_yaml: Yaml, file: P, root_dir: &str) -> Result<Depsfile>
+    where
+        P: AsRef<Path> + Display,
+    {
+        let language = parse_language(&config_yaml["language"], file, root_dir);
         let dep_patterns = yaml_str_list(&config_yaml["dependencies"]);
 
         // TODO: report/warn on invalid patterns?
@@ -170,13 +173,16 @@ impl Depsfile {
     }
 
     /// Try to parse the given `Yaml` into a valid `Config`
-    fn buildfile_from_yaml(config_yaml: Yaml, root_dir: &str) -> Result<Depsfile> {
+    fn buildfile_from_yaml<P>(config_yaml: Yaml, file: P, root_dir: &str) -> Result<Depsfile>
+    where
+        P: AsRef<Path>,
+    {
         let spec = &config_yaml["spec"];
         let depends_on = &spec["dependsOn"];
         let dep_patterns = yaml_str_list(depends_on);
 
         let metadata = &config_yaml["metadata"];
-        let language = metadata["builder"].as_str().unwrap_or("").into();
+        let language = parse_language(&metadata["builder"], file, root_dir);
 
         // TODO: report/warn on invalid patterns?
         let dependencies = dep_patterns
@@ -189,6 +195,23 @@ impl Depsfile {
             language,
         })
     }
+}
+
+fn parse_language<P>(value: &Yaml, file: P, root_dir: &str) -> Language
+where
+    P: AsRef<Path>,
+{
+    value
+        .as_str()
+        .map(|value| {
+            let converted: Language = value.into();
+            if converted == Language::Unknown {
+                let path = file.as_ref().to_str().unwrap_or(root_dir);
+                log::warn!("unknown language '{value}' [{path}]");
+            }
+            converted
+        })
+        .unwrap_or(Language::Unknown)
 }
 
 /// Try to read the file at path `file` into a `Yaml` structure.
@@ -235,7 +258,7 @@ mod tests {
 
     #[test]
     fn load_config_empty() {
-        let config = Depsfile::depsfile_from_yaml(Yaml::from_str(""), "");
+        let config = Depsfile::depsfile_from_yaml(Yaml::from_str(""), "", "");
 
         assert_eq!(config.is_ok(), true);
     }
@@ -243,7 +266,7 @@ mod tests {
     #[test]
     fn load_config_no_dependencies() {
         let mut docs = YamlLoader::load_from_str("spec:").unwrap();
-        let config = Depsfile::depsfile_from_yaml(docs.remove(0), "");
+        let config = Depsfile::depsfile_from_yaml(docs.remove(0), "", "");
 
         assert_eq!(config.is_ok(), true);
     }

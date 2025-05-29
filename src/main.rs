@@ -2,6 +2,7 @@ use self::cli::{Opts, OutputFormat};
 use self::service::Service;
 
 use anyhow::Result;
+use env_logger::Env;
 
 mod cli;
 mod config;
@@ -12,6 +13,11 @@ mod service;
 fn main() {
     let opts = bail_out(Opts::parse());
     let changed_files = bail_out(collect_changed_files());
+
+    env_logger::Builder::from_env(Env::default().default_filter_or("warn"))
+        .format_timestamp(None)
+        .format_target(false)
+        .init();
 
     match service::Service::discover(&opts)
         .and_then(|services| dependency::resolve(services, changed_files, &opts))
