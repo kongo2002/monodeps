@@ -1,12 +1,19 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use getopts::Options;
 
 use crate::config::Config;
 use crate::path::PathInfo;
 
+pub enum OutputFormat {
+    Plain,
+    Json,
+}
+
 pub struct Opts {
     pub target: PathInfo,
     pub config: Config,
+    pub output: OutputFormat,
+    pub verbose: bool,
 }
 
 impl Opts {
@@ -16,6 +23,8 @@ impl Opts {
         let mut opts = Options::new();
         opts.optopt("t", "target", "target directory to operate on", "DIR");
         opts.optopt("c", "config", "configuration file", "FILE");
+        opts.optopt("o", "output", "output format", "FORMAT");
+        opts.optflag("v", "verbose", "verbose output");
         opts.optflag("h", "help", "show help");
 
         let matches = opts.parse(&args[1..])?;
@@ -29,6 +38,12 @@ impl Opts {
         let target_dir = matches.opt_str("t").unwrap_or(".".to_owned());
         let target = PathInfo::new(&target_dir, "")?;
         let config_path = matches.opt_str("c");
+        let output = parse_format(
+            matches
+                .opt_str("o")
+                .unwrap_or_else(|| String::from("plain")),
+        )?;
+        let verbose = matches.opt_present("v");
 
         let config = match config_path {
             Some(path) => Config::new(&path)?,
@@ -38,7 +53,20 @@ impl Opts {
             }
         };
 
-        Ok(Self { target, config })
+        Ok(Self {
+            target,
+            config,
+            output,
+            verbose,
+        })
+    }
+}
+
+fn parse_format(input: String) -> Result<OutputFormat> {
+    match input.as_str() {
+        "json" => Ok(OutputFormat::Json),
+        "plain" => Ok(OutputFormat::Plain),
+        _ => Err(anyhow!("invalid output format (supported: plain, json)")),
     }
 }
 

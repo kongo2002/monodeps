@@ -7,6 +7,7 @@ use crate::cli::Opts;
 use crate::config::{Config, DepPattern, Depsfile, DepsfileType, Language};
 use crate::path::PathInfo;
 use anyhow::Result;
+use serde::Serialize;
 use walkdir::{DirEntry, WalkDir};
 
 use self::dotnet::DotnetAnalyzer;
@@ -15,7 +16,7 @@ use self::go::GoAnalyzer;
 mod dotnet;
 mod go;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum BuildTrigger {
     FileChange,
     Dependency(String, bool),
@@ -98,7 +99,7 @@ pub struct Service {
     pub path: PathInfo,
     pub depsfile: Depsfile,
     pub auto_dependencies: Vec<DepPattern>,
-    triggers: Vec<BuildTrigger>,
+    pub triggers: Vec<BuildTrigger>,
 }
 
 impl Service {
@@ -165,24 +166,6 @@ where
         })
         // skip errors (e.g. non permission directories)
         .filter_map(|e| e.ok())
-}
-
-impl Display for Service {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{} [", self.path.canonicalized))?;
-
-        let mut idx = 0;
-        for trigger in &self.triggers {
-            if idx > 0 {
-                f.write_str(",")?;
-            }
-            f.write_fmt(format_args!("{}", trigger))?;
-            idx += 1;
-        }
-        f.write_str("]")?;
-
-        Ok(())
-    }
 }
 
 fn get_locations(entry: DirEntry, root_dir: &str) -> Option<(PathInfo, PathInfo)> {

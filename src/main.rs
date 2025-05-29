@@ -1,4 +1,5 @@
-use self::cli::Opts;
+use self::cli::{Opts, OutputFormat};
+use self::service::Service;
 
 use anyhow::Result;
 
@@ -15,12 +16,44 @@ fn main() {
     match service::Service::discover(&opts)
         .and_then(|services| dependency::resolve(services, changed_files, &opts))
     {
-        Ok(svs) => {
-            for svc in svs {
-                println!("{}", svc)
-            }
-        }
+        Ok(svs) => output(svs, opts.output, opts.verbose),
         Err(err) => eprintln!("failed to resolve dependencies: {err}"),
+    }
+}
+
+fn output(services: Vec<Service>, output: OutputFormat, verbose: bool) {
+    match output {
+        OutputFormat::Plain => {
+            print_services(std::io::stdout(), services, verbose);
+        }
+        OutputFormat::Json => {
+            let to_output = services
+                .into_iter()
+                .map(|svc| svc.path.canonicalized)
+                .collect::<Vec<_>>();
+            _ = serde_json::to_writer(std::io::stdout(), &to_output);
+        }
+    }
+}
+
+fn print_services<W>(mut w: W, services: Vec<Service>, verbose: bool)
+where
+    W: std::io::Write,
+{
+    for svc in services {
+        if !verbose {
+            _ = w.write_fmt(format_args!("{}\n", svc.path.canonicalized));
+        } else {
+            _ = w.write_fmt(format_args!(
+                "{} [{}]\n",
+                svc.path.canonicalized,
+                svc.triggers
+                    .into_iter()
+                    .map(|t| format!("{}", t))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
     }
 }
 
