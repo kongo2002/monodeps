@@ -4,10 +4,13 @@ use std::io::{BufRead, BufReader, Lines};
 use std::path::Path;
 
 use crate::cli::Opts;
-use crate::config::{DepPattern, Depsfile, DepsfileType, Language};
+use crate::config::{Config, DepPattern, Depsfile, DepsfileType, Language};
 use crate::path::PathInfo;
 use anyhow::Result;
 use walkdir::{DirEntry, WalkDir};
+
+use self::dotnet::DotnetAnalyzer;
+use self::go::GoAnalyzer;
 
 mod dotnet;
 mod go;
@@ -41,6 +44,55 @@ impl Display for BuildTrigger {
     }
 }
 
+struct Analyzer {
+    dotnet: Option<DotnetAnalyzer>,
+    go: Option<GoAnalyzer>,
+}
+
+impl Analyzer {
+    fn new(config: &Config) -> Analyzer {
+        let dotnet = if config.auto_discovery_enabled(&Language::Dotnet) {
+            DotnetAnalyzer::new().ok()
+        } else {
+            None
+        };
+        let go = if config.auto_discovery_enabled(&Language::Golang) {
+            Some(GoAnalyzer {})
+        } else {
+            None
+        };
+
+        Self { dotnet, go }
+    }
+
+    fn auto_discover<P>(&self, language: &Language, dir: P, opts: &Opts) -> Vec<DepPattern>
+    where
+        P: AsRef<Path>,
+    {
+        let result = match language {
+            Language::Golang => self
+                .go
+                .as_ref()
+                .map(|analyzer| analyzer.dependencies(dir, opts))
+                .unwrap_or_else(|| Ok(Vec::new())),
+            Language::Dotnet => self
+                .dotnet
+                .as_ref()
+                .map(|analyzer| analyzer.dependencies(dir, opts))
+                .unwrap_or_else(|| Ok(Vec::new())),
+            Language::Unknown => Ok(Vec::new()),
+        };
+
+        match result {
+            Ok(deps) => deps,
+            Err(err) => {
+                eprintln!("failed to auto-discover dependencies: {err}",);
+                Vec::new()
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Service {
     pub path: PathInfo,
@@ -61,20 +113,15 @@ impl Service {
     }
 
     pub fn discover(opts: &Opts) -> Result<Vec<Service>> {
+        let analyzer = Analyzer::new(&opts.config);
         let root_dir = &opts.target.canonicalized;
         let mut all = Vec::new();
 
-        let dotnet_analyzer = if opts.config.auto_discovery_enabled(&Language::Dotnet) {
-            dotnet::DotnetAnalyzer::new().ok()
-        } else {
-            None
-        };
-
         for entry in non_hidden_files(root_dir) {
-            let filename = entry.file_name().to_str().unwrap_or("").to_lowercase();
-            let filetype = match filename.as_str() {
-                "buildfile.yaml" => Some(DepsfileType::Buildfile),
-                "depsfile" => Some(DepsfileType::Depsfile),
+            let filename = entry.file_name().to_str().unwrap_or("");
+            let filetype = match filename {
+                "Buildfile.yaml" => Some(DepsfileType::Buildfile),
+                "Depsfile" => Some(DepsfileType::Depsfile),
                 _ => None,
             };
 
@@ -83,39 +130,16 @@ impl Service {
                     let depsfile =
                         Depsfile::load(valid_filetype, &depsfile_location.canonicalized, root_dir)?;
 
-                    let auto_dependencies =
-                        if opts.config.auto_discovery_enabled(&depsfile.language) {
-                            let result = if depsfile.language == Language::Golang {
-                                go::dependencies(&path.canonicalized, &opts)
-                            } else if depsfile.language == Language::Dotnet {
-                                if let Some(analyzer) = &dotnet_analyzer {
-                                    analyzer.dependencies(&path.canonicalized, &opts)
-                                } else {
-                                    Ok(Vec::new())
-                                }
-                            } else {
-                                Ok(Vec::new())
-                            };
+                    let triggers = Vec::new();
 
-                            match result {
-                                Ok(deps) => deps,
-                                Err(err) => {
-                                    eprintln!(
-                                        "failed to auto-discover dependencies from '{}': {err}",
-                                        path.canonicalized
-                                    );
-                                    Vec::new()
-                                }
-                            }
-                        } else {
-                            Vec::new()
-                        };
+                    let auto_dependencies =
+                        analyzer.auto_discover(&depsfile.language, &path.canonicalized, opts);
 
                     let service = Service {
                         path,
                         depsfile,
                         auto_dependencies,
-                        triggers: Vec::new(),
+                        triggers,
                     };
 
                     all.push(service);

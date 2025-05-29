@@ -10,27 +10,31 @@ use super::{non_hidden_files, read_lines};
 
 const SCAN_MAX_LINES: usize = 300;
 
-pub(super) fn dependencies<P>(dir: P, config: &Opts) -> Result<Vec<DepPattern>>
-where
-    P: AsRef<Path>,
-{
-    let mut collected_imports = HashSet::new();
+pub(super) struct GoAnalyzer {}
 
-    for entry in non_hidden_files(&dir) {
-        let filename = entry.file_name().to_str().unwrap_or("").to_lowercase();
-        if !filename.ends_with(".go") {
-            continue;
+impl GoAnalyzer {
+    pub(super) fn dependencies<P>(&self, dir: P, config: &Opts) -> Result<Vec<DepPattern>>
+    where
+        P: AsRef<Path>,
+    {
+        let mut collected_imports = HashSet::new();
+
+        for entry in non_hidden_files(&dir) {
+            let filename = entry.file_name().to_str().unwrap_or("").to_lowercase();
+            if !filename.ends_with(".go") {
+                continue;
+            }
+
+            let lines = read_lines(entry.path())?.map_while(Result::ok);
+
+            collected_imports.extend(find_imports(lines, &config.config.auto_discovery.go)?);
         }
 
-        let lines = read_lines(entry.path())?.map_while(Result::ok);
-
-        collected_imports.extend(find_imports(lines, &config.config.auto_discovery.go)?);
+        Ok(collected_imports
+            .into_iter()
+            .flat_map(|import| DepPattern::new(&import, &config.target.canonicalized))
+            .collect())
     }
-
-    Ok(collected_imports
-        .into_iter()
-        .flat_map(|import| DepPattern::new(&import, &config.target.canonicalized))
-        .collect())
 }
 
 fn find_imports<I>(lines: I, config: &GoDepsConfig) -> Result<Vec<String>>
