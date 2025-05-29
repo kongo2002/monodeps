@@ -83,27 +83,33 @@ impl Service {
                     let depsfile =
                         Depsfile::load(valid_filetype, &depsfile_location.canonicalized, root_dir)?;
 
-                    let mut auto_dependencies = Vec::new();
+                    let auto_dependencies =
+                        if opts.config.auto_discovery_enabled(&depsfile.language) {
+                            let result = if depsfile.language == Language::Golang {
+                                go::dependencies(&path.canonicalized, &opts)
+                            } else if depsfile.language == Language::Dotnet {
+                                if let Some(analyzer) = &dotnet_analyzer {
+                                    analyzer.dependencies(&path.canonicalized, &opts)
+                                } else {
+                                    Ok(Vec::new())
+                                }
+                            } else {
+                                Ok(Vec::new())
+                            };
 
-                    if opts.config.auto_discovery_enabled(&depsfile.language) {
-                        if depsfile.language == Language::Golang {
-                            auto_dependencies.extend(go::dependencies(&path.canonicalized, &opts)?);
-                        } else if depsfile.language == Language::Dotnet {
-                            if let Some(analyzer) = &dotnet_analyzer {
-                                match analyzer.dependencies(&path.canonicalized, &opts) {
-                                    Ok(auto_discovered_deps) => {
-                                        auto_dependencies.extend(auto_discovered_deps)
-                                    }
-                                    Err(err) => {
-                                        eprintln!(
-                                            "failed to auto-discover dependencies from '{}': {err}",
-                                            path.canonicalized
-                                        )
-                                    }
+                            match result {
+                                Ok(deps) => deps,
+                                Err(err) => {
+                                    eprintln!(
+                                        "failed to auto-discover dependencies from '{}': {err}",
+                                        path.canonicalized
+                                    );
+                                    Vec::new()
                                 }
                             }
-                        }
-                    }
+                        } else {
+                            Vec::new()
+                        };
 
                     let service = Service {
                         path,
