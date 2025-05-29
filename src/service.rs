@@ -53,7 +53,12 @@ struct Analyzer {
 impl Analyzer {
     fn new(config: &Config) -> Analyzer {
         let dotnet = if config.auto_discovery_enabled(&Language::Dotnet) {
-            DotnetAnalyzer::new().ok()
+            DotnetAnalyzer::new()
+                .map_err(|err| {
+                    log::warn!("failed to initialize dependency analyzer for .NET: {err}");
+                    err
+                })
+                .ok()
         } else {
             None
         };
@@ -74,12 +79,12 @@ impl Analyzer {
             Language::Golang => self
                 .go
                 .as_ref()
-                .map(|analyzer| analyzer.dependencies(dir, opts))
+                .map(|analyzer| analyzer.dependencies(&dir, opts))
                 .unwrap_or_else(|| Ok(Vec::new())),
             Language::Dotnet => self
                 .dotnet
                 .as_ref()
-                .map(|analyzer| analyzer.dependencies(dir, opts))
+                .map(|analyzer| analyzer.dependencies(&dir, opts))
                 .unwrap_or_else(|| Ok(Vec::new())),
             Language::Unknown => Ok(Vec::new()),
         };
@@ -87,7 +92,9 @@ impl Analyzer {
         match result {
             Ok(deps) => deps,
             Err(err) => {
-                eprintln!("failed to auto-discover dependencies: {err}",);
+                let path = dir.as_ref().to_str().unwrap_or_default();
+                log::warn!("failed to auto-discover dependencies: {err} [{path}]");
+
                 Vec::new()
             }
         }
