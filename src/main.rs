@@ -12,14 +12,15 @@ fn main() {
     let opts = bail_out(Opts::parse());
     let changed_files = bail_out(collect_changed_files());
 
-    match service::Service::discover(&opts) {
+    match service::Service::discover(&opts)
+        .and_then(|services| dependency::resolve(services, changed_files, &opts))
+    {
         Ok(svs) => {
-            let svs = dependency::resolve(svs, changed_files, &opts).unwrap();
             for svc in svs {
                 println!("{}", svc)
             }
         }
-        Err(err) => eprintln!("failed to discover services: {err}"),
+        Err(err) => eprintln!("failed to resolve dependencies: {err}"),
     }
 }
 
