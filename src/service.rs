@@ -87,6 +87,7 @@ impl Analyzer {
                 .as_ref()
                 .map(|analyzer| analyzer.dependencies(&dir, opts))
                 .unwrap_or_else(|| Ok(Vec::new())),
+            Language::Flutter => Ok(Vec::new()),
             Language::Unknown => Ok(Vec::new()),
         };
 
@@ -209,6 +210,7 @@ fn try_determine_language(entry: &DirEntry) -> Option<Language> {
     match extension {
         "cs" | "csproj" => Some(Language::Dotnet),
         "go" => Some(Language::Golang),
+        "dart" => Some(Language::Flutter),
         _ => None,
     }
 }

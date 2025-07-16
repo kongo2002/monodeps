@@ -59,6 +59,7 @@ impl Config {
         match language {
             Language::Golang => !self.auto_discovery.go.package_prefixes.is_empty(),
             Language::Dotnet => true,
+            Language::Flutter => false, // not implemented yet
             Language::Unknown => false,
         }
     }
@@ -114,6 +115,7 @@ fn to_glob_regex(pattern: &str) -> Result<Regex> {
 pub enum Language {
     Golang,
     Dotnet,
+    Flutter,
     Unknown,
 }
 
@@ -123,6 +125,8 @@ impl From<&str> for Language {
             "golang" => Language::Golang,
             "dotnet" => Language::Dotnet,
             "csharp" => Language::Dotnet,
+            "dart" => Language::Flutter,
+            "flutter" => Language::Flutter,
             _ => Language::Unknown,
         }
     }
