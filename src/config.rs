@@ -110,7 +110,7 @@ fn to_glob_regex(pattern: &str) -> Result<Regex> {
     Ok(rgx)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Hash)]
 pub enum Language {
     Golang,
     Dotnet,

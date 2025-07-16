@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Lines};
@@ -141,20 +142,21 @@ impl Service {
 
             if let Some(valid_filetype) = filetype {
                 if let Some((depsfile_location, path)) = get_locations(entry, root_dir) {
-                    let depsfile =
-                        Depsfile::load(valid_filetype, &depsfile_location.canonicalized, root_dir)?;
-
-                    let triggers = Vec::new();
-
-                    let auto_dependencies =
-                        analyzer.auto_discover(&depsfile.language, &path.canonicalized, opts);
-
                     // when the dependency file is directly in the project root there is no real
                     // reason to consider it because we would just return the full project
                     if path.canonicalized == *root_dir {
                         continue;
                     }
 
+                    let base_depsfile =
+                        Depsfile::load(valid_filetype, &depsfile_location.canonicalized, root_dir)?;
+
+                    let depsfile = auto_discover_language(base_depsfile, &path);
+
+                    let auto_dependencies =
+                        analyzer.auto_discover(&depsfile.language, &path.canonicalized, opts);
+
+                    let triggers = Vec::new();
                     let service = Service {
                         path,
                         depsfile,
@@ -167,6 +169,47 @@ impl Service {
             }
         }
         Ok(all)
+    }
+}
+
+fn auto_discover_language(depsfile: Depsfile, path: &PathInfo) -> Depsfile {
+    if depsfile.language != Language::Unknown {
+        return depsfile;
+    }
+
+    let mut filetype_frequencies = HashMap::new();
+
+    for entry in non_hidden_files(&path.canonicalized) {
+        if let Some(lang) = try_determine_language(&entry) {
+            let val = filetype_frequencies.entry(lang).or_insert(0);
+            *val += 1;
+        }
+    }
+
+    let mut freq_list = filetype_frequencies.into_iter().collect::<Vec<_>>();
+    freq_list.sort_by_key(|entry| -entry.1);
+
+    if let Some((language, count)) = freq_list.into_iter().next() {
+        if count > 1 {
+            log::debug!("auto-determined language {language:?} for {}", path.path);
+
+            return Depsfile {
+                language,
+                ..depsfile
+            };
+        }
+    }
+
+    depsfile
+}
+
+fn try_determine_language(entry: &DirEntry) -> Option<Language> {
+    let extension = entry.path().extension().and_then(|x| x.to_str())?;
+
+    match extension {
+        "cs" | "csproj" => Some(Language::Dotnet),
+        "go" => Some(Language::Golang),
+        _ => None,
     }
 }
 
