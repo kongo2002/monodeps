@@ -127,9 +127,12 @@ impl From<&str> for Language {
     }
 }
 
+#[derive(PartialEq)]
 pub enum DepsfileType {
     Depsfile,
     Buildfile,
+    Justfile,
+    Makefile,
 }
 
 #[derive(Debug)]
@@ -145,11 +148,24 @@ impl Depsfile {
     where
         P: AsRef<Path> + Display,
     {
-        let config_yaml = load_yaml(&file)?;
-
         match file_type {
-            DepsfileType::Depsfile => Depsfile::depsfile_from_yaml(config_yaml, file, root_dir),
-            DepsfileType::Buildfile => Depsfile::buildfile_from_yaml(config_yaml, file, root_dir),
+            DepsfileType::Depsfile => {
+                let config_yaml = load_yaml(&file)?;
+                Depsfile::depsfile_from_yaml(config_yaml, file, root_dir)
+            }
+            DepsfileType::Buildfile => {
+                let config_yaml = load_yaml(&file)?;
+                Depsfile::buildfile_from_yaml(config_yaml, file, root_dir)
+            }
+            DepsfileType::Justfile => Ok(Depsfile::empty()),
+            DepsfileType::Makefile => Ok(Depsfile::empty()),
+        }
+    }
+
+    fn empty() -> Depsfile {
+        Depsfile {
+            dependencies: Vec::new(),
+            language: Language::Unknown,
         }
     }
 

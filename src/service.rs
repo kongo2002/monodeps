@@ -130,6 +130,12 @@ impl Service {
             let filetype = match filename {
                 "Buildfile.yaml" => Some(DepsfileType::Buildfile),
                 "Depsfile" => Some(DepsfileType::Depsfile),
+                "justfile" => {
+                    Some(DepsfileType::Justfile).filter(|x| opts.supported_roots.contains(x))
+                }
+                "Makefile" => {
+                    Some(DepsfileType::Makefile).filter(|x| opts.supported_roots.contains(x))
+                }
                 _ => None,
             };
 
@@ -142,6 +148,12 @@ impl Service {
 
                     let auto_dependencies =
                         analyzer.auto_discover(&depsfile.language, &path.canonicalized, opts);
+
+                    // when the dependency file is directly in the project root there is no real
+                    // reason to consider it because we would just return the full project
+                    if path.canonicalized == *root_dir {
+                        continue;
+                    }
 
                     let service = Service {
                         path,

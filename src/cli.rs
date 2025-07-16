@@ -1,7 +1,7 @@
 use anyhow::{Result, anyhow};
 use getopts::Options;
 
-use crate::config::Config;
+use crate::config::{Config, DepsfileType};
 use crate::path::PathInfo;
 
 pub enum OutputFormat {
@@ -14,6 +14,7 @@ pub struct Opts {
     pub config: Config,
     pub output: OutputFormat,
     pub verbose: bool,
+    pub supported_roots: Vec<DepsfileType>,
 }
 
 impl Opts {
@@ -24,6 +25,8 @@ impl Opts {
         opts.optopt("t", "target", "target directory to operate on", "DIR");
         opts.optopt("c", "config", "configuration file", "FILE");
         opts.optopt("o", "output", "output format", "FORMAT");
+        opts.optflag("", "makefile", "accept 'Makefile' as project roots");
+        opts.optflag("", "justfile", "accept 'justfile' as project roots");
         opts.optflag("v", "verbose", "verbose output");
         opts.optflag("h", "help", "show help");
 
@@ -53,11 +56,22 @@ impl Opts {
             }
         };
 
+        let mut supported_roots = vec![];
+
+        if matches.opt_present("makefile") {
+            supported_roots.push(DepsfileType::Makefile);
+        }
+
+        if matches.opt_present("justfile") {
+            supported_roots.push(DepsfileType::Justfile);
+        }
+
         Ok(Self {
             target,
             config,
             output,
             verbose,
+            supported_roots,
         })
     }
 }
