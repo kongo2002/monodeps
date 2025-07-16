@@ -122,6 +122,7 @@ impl From<&str> for Language {
         match value {
             "golang" => Language::Golang,
             "dotnet" => Language::Dotnet,
+            "csharp" => Language::Dotnet,
             _ => Language::Unknown,
         }
     }
