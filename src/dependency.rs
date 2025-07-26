@@ -18,7 +18,7 @@ pub fn resolve(
 
     if log::log_enabled!(log::Level::Debug) {
         for svc in &services {
-            log::debug!("discovered service: {:?}", svc);
+            log::debug!("discovered service: {}", svc);
         }
     }
 
