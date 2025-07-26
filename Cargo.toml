@@ -1,6 +1,10 @@
 [package]
+authors = ["kongo2002 <kongo2002@gmail.com>"]
+homepage = "https://github.com/kongo2002/monodeps"
+repository = "https://github.com/kongo2002/monodeps"
+description = "change detection CLI for mono-repository setups"
 name = "monodeps"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 
 [dependencies]
