@@ -23,22 +23,29 @@ git diff-tree --no-commit-id --name-only HEAD -r | monodeps
 The general idea of monodeps is to calculate direct and transitive dependencies
 of services by both using `Depsfile` files that explicitly list dependencies and
 also trying to auto-discover dependencies for a list of known programming
-languages/frameworks. Of course, auto-discover can also be considered "best
-effort" but can ease and simplify initial setup of a mono-repository.
+languages/frameworks. Of course, auto-discovery can only be considered "best
+effort" but can ease and simplify the initial setup of a mono-repository
+considerably.
+
+
+## Installation
+
+Go to the [releases page][releases], expand the list of assets and download a
+ready-to-run binary.
 
 
 ## Configuration
 
 In terms of configuration there are two components: a global, optional
-configuration file on a per-repository base and a `Depsfile` per service that
-can potentially be built and deployed in CI/CD.
+configuration file on a per-repository base and a `Depsfile` for each service
+that is built and deployed in CI/CD.
 
 
 ### Depsfile
 
-The `Depsfile` is expected in the root directory of a single service/depolyment.
+The `Depsfile` is expected in the root directory of a single service/deployment.
 All components of the file are optional, meaning an empty file can work as well,
-therefore fully depending on monodeps' auto-discovery capabilities.
+consequently fully depending on monodeps' auto-discovery capabilities.
 
 ```yaml
 # Specifying the language of the respective service helps monodeps to know what
@@ -91,12 +98,6 @@ auto_discovery:
     package_namespaces:
       - MyOrganization.Services
 ```
-
-
-## Installation
-
-Go to the [releases page][releases], expand the list of assets and download a
-ready-to-run binary.
 
 
 ## Building
