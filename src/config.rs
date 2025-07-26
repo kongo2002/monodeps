@@ -1,11 +1,12 @@
 use std::fmt::Display;
 use std::path::Path;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use regex::Regex;
-use yaml_rust::{Yaml, YamlLoader};
+use yaml_rust::Yaml;
 
 use crate::path::PathInfo;
+use crate::utils::{load_yaml, yaml_str_list};
 
 #[derive(Default)]
 pub struct Config {
@@ -59,7 +60,7 @@ impl Config {
         match language {
             Language::Golang => !self.auto_discovery.go.package_prefixes.is_empty(),
             Language::Dotnet => true,
-            Language::Flutter => false, // not implemented yet
+            Language::Flutter => true,
             Language::Unknown => false,
         }
     }
@@ -152,7 +153,7 @@ impl Depsfile {
     /// is expected to be a YAML file.
     pub fn load<P>(file_type: DepsfileType, file: P, root_dir: &str) -> Result<Depsfile>
     where
-        P: AsRef<Path> + Display,
+        P: AsRef<Path>,
     {
         match file_type {
             DepsfileType::Depsfile => {
@@ -177,7 +178,7 @@ impl Depsfile {
 
     fn depsfile_from_yaml<P>(config_yaml: Yaml, file: P, root_dir: &str) -> Result<Depsfile>
     where
-        P: AsRef<Path> + Display,
+        P: AsRef<Path>,
     {
         let language = parse_language(&config_yaml["language"], file, root_dir);
         let dep_patterns = yaml_str_list(&config_yaml["dependencies"]);
@@ -234,40 +235,6 @@ where
             converted
         })
         .unwrap_or(Language::Unknown)
-}
-
-/// Try to read the file at path `file` into a `Yaml` structure.
-fn load_yaml<P>(file: P) -> Result<Yaml>
-where
-    P: AsRef<Path> + Display,
-{
-    if !file.as_ref().exists() {
-        bail!("cannot find file {}", file)
-    }
-
-    let config_content = std::fs::read_to_string(file)?;
-    let mut docs = YamlLoader::load_from_str(&config_content)?;
-
-    if docs.is_empty() {
-        // we just return an empty structure here which is ok
-        Ok(Yaml::from_str(""))
-    } else {
-        // we are only interested in the first parsed "file"
-        Ok(docs.remove(0))
-    }
-}
-
-/// Try to extract the given `Yaml` into a list of `String`.
-/// If it is anything else, it will return an empty list.
-fn yaml_str_list(yaml: &Yaml) -> Vec<String> {
-    let empty_list = Default::default();
-
-    yaml.as_vec()
-        .unwrap_or(&empty_list)
-        .into_iter()
-        .flat_map(|entry| entry.as_str().map(|x| x.to_owned()))
-        .filter(|value| !value.is_empty())
-        .collect()
 }
 
 #[cfg(test)]

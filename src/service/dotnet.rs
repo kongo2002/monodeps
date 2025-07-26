@@ -5,6 +5,7 @@ use sxd_xpath::{Context, Factory, XPath};
 
 use crate::cli::Opts;
 use crate::config::DepPattern;
+use crate::service::parent_dir;
 
 use super::non_hidden_files;
 
@@ -42,7 +43,10 @@ impl DotnetAnalyzer {
                 continue;
             }
 
-            log::debug!("dotnet: analyzing C# project file '{:?}'", entry.path());
+            log::debug!(
+                "dotnet: analyzing C# project file '{}'",
+                entry.path().display()
+            );
 
             let file_content = std::fs::read_to_string(entry.path())?;
 
@@ -116,16 +120,6 @@ fn extract_project_dir(include: &str) -> Option<Import> {
     let name = path.file_stem()?.to_str()?.to_string();
 
     Some(Import { service_dir, name })
-}
-
-fn parent_dir(filename: &Path) -> Option<String> {
-    let path = PathBuf::from(filename);
-    path.ancestors()
-        .skip(1)
-        .next()
-        .and_then(|p| p.to_str())
-        .map(|p| p.to_string())
-        .filter(|p| !p.is_empty())
 }
 
 #[cfg(test)]

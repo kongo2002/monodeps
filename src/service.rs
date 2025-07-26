@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Lines};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::cli::Opts;
 use crate::config::{Config, DepPattern, Depsfile, DepsfileType, Language};
@@ -12,9 +12,11 @@ use serde::Serialize;
 use walkdir::{DirEntry, WalkDir};
 
 use self::dotnet::DotnetAnalyzer;
+use self::flutter::FlutterAnalyzer;
 use self::go::GoAnalyzer;
 
 mod dotnet;
+mod flutter;
 mod go;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -49,6 +51,7 @@ impl Display for BuildTrigger {
 struct Analyzer {
     dotnet: Option<DotnetAnalyzer>,
     go: Option<GoAnalyzer>,
+    flutter: Option<FlutterAnalyzer>,
 }
 
 impl Analyzer {
@@ -63,13 +66,24 @@ impl Analyzer {
         } else {
             None
         };
+
         let go = if config.auto_discovery_enabled(&Language::Golang) {
             Some(GoAnalyzer {})
         } else {
             None
         };
 
-        Self { dotnet, go }
+        let flutter = if config.auto_discovery_enabled(&Language::Flutter) {
+            Some(FlutterAnalyzer {})
+        } else {
+            None
+        };
+
+        Self {
+            dotnet,
+            go,
+            flutter,
+        }
     }
 
     fn auto_discover<P>(&self, language: &Language, dir: P, opts: &Opts) -> Vec<DepPattern>
@@ -87,7 +101,11 @@ impl Analyzer {
                 .as_ref()
                 .map(|analyzer| analyzer.dependencies(&dir, opts))
                 .unwrap_or_else(|| Ok(Vec::new())),
-            Language::Flutter => Ok(Vec::new()),
+            Language::Flutter => self
+                .flutter
+                .as_ref()
+                .map(|analyzer| analyzer.dependencies(&dir))
+                .unwrap_or_else(|| Ok(Vec::new())),
             Language::Unknown => Ok(Vec::new()),
         };
 
@@ -230,6 +248,16 @@ where
         })
         // skip errors (e.g. non permission directories)
         .filter_map(|e| e.ok())
+}
+
+fn parent_dir(filename: &Path) -> Option<String> {
+    let path = PathBuf::from(filename);
+    path.ancestors()
+        .skip(1)
+        .next()
+        .and_then(|p| p.to_str())
+        .map(|p| p.to_string())
+        .filter(|p| !p.is_empty())
 }
 
 fn get_locations(entry: DirEntry, root_dir: &str) -> Option<(PathInfo, PathInfo)> {

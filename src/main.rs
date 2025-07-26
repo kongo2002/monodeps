@@ -9,6 +9,7 @@ mod config;
 mod dependency;
 mod path;
 mod service;
+mod utils;
 
 fn main() {
     let opts = bail_out(Opts::parse());
