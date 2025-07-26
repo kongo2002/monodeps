@@ -122,6 +122,7 @@ pub enum Language {
 impl From<&str> for Language {
     fn from(value: &str) -> Self {
         match value {
+            "go" => Language::Golang,
             "golang" => Language::Golang,
             "dotnet" => Language::Dotnet,
             "csharp" => Language::Dotnet,
