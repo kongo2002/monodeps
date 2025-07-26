@@ -226,9 +226,15 @@ fn try_determine_language(entry: &DirEntry) -> Option<Language> {
     let extension = entry.path().extension().and_then(|x| x.to_str())?;
 
     match extension {
-        "cs" | "csproj" => Some(Language::Dotnet),
-        "go" => Some(Language::Golang),
-        "dart" => Some(Language::Flutter),
+        "cs" | "csproj" => return Some(Language::Dotnet),
+        "go" => return Some(Language::Golang),
+        "dart" => return Some(Language::Flutter),
+        _ => {}
+    }
+
+    match entry.file_name().to_str().unwrap_or_default() {
+        "pubspec.yaml" | "pubspec.lock" => Some(Language::Flutter),
+        "go.mod" | "go.sum" => Some(Language::Golang),
         _ => None,
     }
 }
