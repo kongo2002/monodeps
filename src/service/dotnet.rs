@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Result, anyhow};
@@ -32,7 +31,7 @@ impl DotnetAnalyzer {
     where
         P: AsRef<Path>,
     {
-        let mut collected_imports = HashSet::new();
+        let mut collected_imports = Vec::new();
 
         for entry in non_hidden_files(&dir) {
             let extension = entry.path().extension();
@@ -43,6 +42,8 @@ impl DotnetAnalyzer {
                 continue;
             }
 
+            log::debug!("dotnet: analyzing C# project file '{:?}'", entry.path());
+
             let file_content = std::fs::read_to_string(entry.path())?;
 
             // the XML parser does not support UTF8 BOM
@@ -52,13 +53,13 @@ impl DotnetAnalyzer {
                 &opts.config.auto_discovery.dotnet.package_namespaces,
             )?;
 
-            collected_imports.extend(imports);
+            collected_imports.extend(imports.into_iter().flat_map(|import| {
+                parent_dir(entry.path())
+                    .and_then(|project_dir| DepPattern::new(&import, &project_dir).ok())
+            }));
         }
 
-        Ok(collected_imports
-            .into_iter()
-            .flat_map(|import| DepPattern::new(&import, &dir))
-            .collect())
+        Ok(collected_imports)
     }
 
     fn extract_project_references(
@@ -115,6 +116,16 @@ fn extract_project_dir(include: &str) -> Option<Import> {
     let name = path.file_stem()?.to_str()?.to_string();
 
     Some(Import { service_dir, name })
+}
+
+fn parent_dir(filename: &Path) -> Option<String> {
+    let path = PathBuf::from(filename);
+    path.ancestors()
+        .skip(1)
+        .next()
+        .and_then(|p| p.to_str())
+        .map(|p| p.to_string())
+        .filter(|p| !p.is_empty())
 }
 
 #[cfg(test)]

@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use anyhow::{Result, anyhow};
+use path_clean::PathClean;
 
 #[derive(Debug, Clone)]
 pub struct PathInfo {
@@ -28,8 +29,9 @@ impl PathInfo {
 }
 
 fn canonicalize(path: &Path) -> Result<String> {
-    let canonicalized = std::fs::canonicalize(path)?;
-    let canonical_str = canonicalized
+    let canonicalized = std::path::absolute(path)?;
+    let cleaned = canonicalized.clean();
+    let canonical_str = cleaned
         .to_str()
         .ok_or(anyhow!("cannot convert file path to string"))?;
 
@@ -40,12 +42,23 @@ fn canonicalize(path: &Path) -> Result<String> {
 mod tests {
     use super::PathInfo;
 
+    fn absolute(path: &str) -> String {
+        std::path::absolute(path)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned()
+    }
+
     #[test]
     fn new_path_info_non_existing_file() {
         let info = PathInfo::new("dir/does/not/exist", ".");
 
         assert_eq!(info.is_ok(), true);
-        assert_eq!(info.unwrap().canonicalized, "./dir/does/not/exist");
+        assert_eq!(
+            info.unwrap().canonicalized,
+            absolute("./dir/does/not/exist")
+        );
     }
 
     #[test]
@@ -69,6 +82,6 @@ mod tests {
         let info = PathInfo::new("src/*", ".");
 
         assert_eq!(info.is_ok(), true);
-        assert_eq!(info.unwrap().canonicalized, "./src/*");
+        assert_eq!(info.unwrap().canonicalized, absolute("./src/*"));
     }
 }

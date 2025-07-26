@@ -278,6 +278,14 @@ mod tests {
 
     use super::DepPattern;
 
+    fn absolute(path: &str) -> String {
+        std::path::absolute(path)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned()
+    }
+
     #[test]
     fn load_config_empty() {
         let config = Depsfile::depsfile_from_yaml(Yaml::from_str(""), "", "");
@@ -297,7 +305,7 @@ mod tests {
     fn dep_pattern_basic() {
         let pat = DepPattern::new("domains/foo", ".").unwrap();
 
-        assert_eq!(pat.is_match("./domains/foo/something"), true);
+        assert_eq!(pat.is_match(&absolute("./domains/foo/something")), true);
         assert_eq!(pat.is_match("./domains/else/foo"), false);
     }
 
@@ -313,7 +321,10 @@ mod tests {
     fn dep_pattern_dot() {
         let pat = DepPattern::new("domains/foo/services/.hidden", ".").unwrap();
 
-        assert_eq!(pat.is_match("./domains/foo/services/.hidden/stuff"), true);
+        assert_eq!(
+            pat.is_match(&absolute("./domains/foo/services/.hidden/stuff")),
+            true
+        );
         assert_eq!(pat.is_match("./domains/foo/services/xhidden/stuff"), false);
     }
 
