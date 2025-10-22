@@ -9,12 +9,18 @@ pub enum OutputFormat {
     Json,
 }
 
+pub enum Operation {
+    Dependencies,
+    Validate,
+}
+
 pub struct Opts {
     pub target: PathInfo,
     pub config: Config,
     pub output: OutputFormat,
     pub verbose: bool,
     pub supported_roots: Vec<DepsfileType>,
+    pub operation: Operation,
 }
 
 impl Opts {
@@ -31,6 +37,16 @@ impl Opts {
         opts.optflag("h", "help", "show help");
 
         let matches = opts.parse(&args[1..])?;
+
+        let operation = matches
+            .free
+            .iter()
+            .next()
+            .map(|operation_str| match operation_str.as_str() {
+                "validate" => Operation::Validate,
+                _ => Operation::Dependencies,
+            })
+            .unwrap_or(Operation::Dependencies);
 
         // print help/usage
         if matches.opt_present("h") {
@@ -72,6 +88,7 @@ impl Opts {
             output,
             verbose,
             supported_roots,
+            operation,
         })
     }
 }
@@ -86,7 +103,7 @@ fn parse_format(input: String) -> Result<OutputFormat> {
 
 fn usage(opts: &Options, exec: &str) {
     let brief = format!(
-        r#"Usage: {} [OPTIONS]
+        r#"Usage: {} [OPERATION] [OPTIONS]
 
 monodeps is a tool to help with change detection in mono-repository
 setups in order to determine which services or folders are candidate
@@ -99,7 +116,11 @@ respective Depsfile files in each service folder.
 
 For instance, you could pipe the git diff output to monodeps:
 
-    git diff-tree --no-commit-id --name-only HEAD -r | monodeps"#,
+    git diff-tree --no-commit-id --name-only HEAD -r | monodeps
+
+Operations:
+    dependencies    determine dependencies (default)
+    validate        validate the given Depsfile"#,
         exec
     );
 

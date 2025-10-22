@@ -1,4 +1,4 @@
-use self::cli::{Opts, OutputFormat};
+use self::cli::{Operation, Opts, OutputFormat};
 use self::service::Service;
 
 use anyhow::Result;
@@ -13,12 +13,22 @@ mod utils;
 
 fn main() {
     let opts = bail_out(Opts::parse());
-    let changed_files = bail_out(collect_changed_files());
 
     env_logger::Builder::from_env(Env::default().default_filter_or("warn"))
         .format_timestamp(None)
         .format_target(false)
         .init();
+
+    match opts.operation {
+        Operation::Dependencies => dependencies(opts),
+        Operation::Validate => validate(opts),
+    }
+}
+
+fn validate(_opts: Opts) {}
+
+fn dependencies(opts: Opts) {
+    let changed_files = bail_out(collect_changed_files());
 
     match service::Service::discover(&opts)
         .and_then(|services| dependency::resolve(services, changed_files, &opts))
