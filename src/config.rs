@@ -61,6 +61,7 @@ impl Config {
             Language::Golang => !self.auto_discovery.go.package_prefixes.is_empty(),
             Language::Dotnet => true,
             Language::Flutter => true,
+            Language::Kustomize => false,
             Language::Unknown => false,
         }
     }
@@ -120,6 +121,7 @@ pub enum Language {
     Golang,
     Dotnet,
     Flutter,
+    Kustomize,
     Unknown,
 }
 
@@ -132,6 +134,7 @@ impl From<&str> for Language {
             "csharp" => Language::Dotnet,
             "dart" => Language::Flutter,
             "flutter" => Language::Flutter,
+            "kustomize" => Language::Kustomize,
             _ => Language::Unknown,
         }
     }

@@ -106,6 +106,7 @@ impl Analyzer {
                 .as_ref()
                 .map(|analyzer| analyzer.dependencies(&dir))
                 .unwrap_or_else(|| Ok(Vec::new())),
+            Language::Kustomize => Ok(Vec::new()),
             Language::Unknown => Ok(Vec::new()),
         };
 
@@ -260,6 +261,7 @@ fn try_determine_language(entry: &DirEntry) -> Option<Language> {
     match entry.file_name().to_str().unwrap_or_default() {
         "pubspec.yaml" | "pubspec.lock" => Some(Language::Flutter),
         "go.mod" | "go.sum" => Some(Language::Golang),
+        "kustomization.yaml" | "kustomization.yml" => Some(Language::Kustomize),
         _ => None,
     }
 }
