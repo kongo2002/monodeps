@@ -61,7 +61,7 @@ impl Config {
             Language::Golang => !self.auto_discovery.go.package_prefixes.is_empty(),
             Language::Dotnet => true,
             Language::Flutter => true,
-            Language::Kustomize => false,
+            Language::Kustomize => true,
             Language::Unknown => false,
         }
     }
@@ -151,7 +151,7 @@ pub enum DepsfileType {
 #[derive(Debug)]
 pub struct Depsfile {
     pub dependencies: Vec<DepPattern>,
-    pub language: Language,
+    pub languages: Vec<Language>,
 }
 
 impl Depsfile {
@@ -178,7 +178,7 @@ impl Depsfile {
     fn empty() -> Depsfile {
         Depsfile {
             dependencies: Vec::new(),
-            language: Language::Unknown,
+            languages: Vec::new(),
         }
     }
 
@@ -186,7 +186,7 @@ impl Depsfile {
     where
         P: AsRef<Path>,
     {
-        let language = parse_language(&config_yaml["language"], file, root_dir);
+        let languages = parse_languages(&config_yaml["languages"], file, root_dir);
         let dep_patterns = yaml_str_list(&config_yaml["dependencies"]);
 
         // TODO: report/warn on invalid patterns?
@@ -197,7 +197,7 @@ impl Depsfile {
 
         Ok(Depsfile {
             dependencies,
-            language,
+            languages,
         })
     }
 
@@ -211,7 +211,9 @@ impl Depsfile {
         let dep_patterns = yaml_str_list(depends_on);
 
         let metadata = &config_yaml["metadata"];
-        let language = parse_language(&metadata["builder"], file, root_dir);
+
+        // TODO: I think builder was just a single string value instead of a list
+        let languages = parse_languages(&metadata["builder"], file, root_dir);
 
         // TODO: report/warn on invalid patterns?
         let dependencies = dep_patterns
@@ -221,26 +223,30 @@ impl Depsfile {
 
         Ok(Depsfile {
             dependencies,
-            language,
+            languages,
         })
     }
 }
 
-fn parse_language<P>(value: &Yaml, file: P, root_dir: &str) -> Language
+fn parse_languages<P>(value: &Yaml, file: P, root_dir: &str) -> Vec<Language>
 where
     P: AsRef<Path>,
 {
-    value
-        .as_str()
+    let values = yaml_str_list(value);
+    values
+        .into_iter()
         .map(|value| {
-            let converted: Language = value.into();
+            let converted: Language = value.as_str().into();
             if converted == Language::Unknown {
                 let path = file.as_ref().to_str().unwrap_or(root_dir);
                 log::warn!("unknown language '{value}' [{path}]");
+                None
+            } else {
+                Some(converted)
             }
-            converted
         })
-        .unwrap_or(Language::Unknown)
+        .flatten()
+        .collect()
 }
 
 #[cfg(test)]

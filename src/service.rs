@@ -14,10 +14,12 @@ use walkdir::{DirEntry, WalkDir};
 use self::dotnet::DotnetAnalyzer;
 use self::flutter::FlutterAnalyzer;
 use self::go::GoAnalyzer;
+use self::kustomize::KustomizeAnalyzer;
 
 mod dotnet;
 mod flutter;
 mod go;
+mod kustomize;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum BuildTrigger {
@@ -52,6 +54,7 @@ struct Analyzer {
     dotnet: Option<DotnetAnalyzer>,
     go: Option<GoAnalyzer>,
     flutter: Option<FlutterAnalyzer>,
+    kustomization: Option<KustomizeAnalyzer>,
 }
 
 impl Analyzer {
@@ -79,10 +82,17 @@ impl Analyzer {
             None
         };
 
+        let kustomization = if config.auto_discovery_enabled(&Language::Flutter) {
+            Some(KustomizeAnalyzer {})
+        } else {
+            None
+        };
+
         Self {
             dotnet,
             go,
             flutter,
+            kustomization,
         }
     }
 
@@ -106,7 +116,11 @@ impl Analyzer {
                 .as_ref()
                 .map(|analyzer| analyzer.dependencies(&dir))
                 .unwrap_or_else(|| Ok(Vec::new())),
-            Language::Kustomize => Ok(Vec::new()),
+            Language::Kustomize => self
+                .kustomization
+                .as_ref()
+                .map(|analyzer| analyzer.dependencies(&dir))
+                .unwrap_or_else(|| Ok(Vec::new())),
             Language::Unknown => Ok(Vec::new()),
         };
 
@@ -196,10 +210,17 @@ impl Service {
                     let base_depsfile =
                         Depsfile::load(valid_filetype, &depsfile_location.canonicalized, root_dir)?;
 
-                    let depsfile = auto_discover_language(base_depsfile, &path);
+                    let depsfile = auto_discover_languages(base_depsfile, &path);
 
-                    let auto_dependencies =
-                        analyzer.auto_discover(&depsfile.language, &path.canonicalized, opts);
+                    // TODO: we may want to filter out dependencies that are within the current
+                    //  service's root directory
+                    let auto_dependencies = depsfile
+                        .languages
+                        .iter()
+                        .flat_map(|language| {
+                            analyzer.auto_discover(language, &path.canonicalized, opts)
+                        })
+                        .collect();
 
                     let triggers = Vec::new();
                     let service = Service {
@@ -217,8 +238,8 @@ impl Service {
     }
 }
 
-fn auto_discover_language(depsfile: Depsfile, path: &PathInfo) -> Depsfile {
-    if depsfile.language != Language::Unknown {
+fn auto_discover_languages(depsfile: Depsfile, path: &PathInfo) -> Depsfile {
+    if !depsfile.languages.is_empty() {
         return depsfile;
     }
 
@@ -226,42 +247,75 @@ fn auto_discover_language(depsfile: Depsfile, path: &PathInfo) -> Depsfile {
 
     for entry in non_hidden_files(&path.canonicalized) {
         if let Some(lang) = try_determine_language(&entry) {
-            let val = filetype_frequencies.entry(lang).or_insert(0);
-            *val += 1;
+            let val = filetype_frequencies.entry(lang.language).or_insert(0);
+            *val += lang.score;
         }
     }
 
     let mut freq_list = filetype_frequencies.into_iter().collect::<Vec<_>>();
     freq_list.sort_by_key(|entry| -entry.1);
 
-    if let Some((language, count)) = freq_list.into_iter().next() {
-        if count > 1 {
-            log::debug!("auto-determined language {language:?} for {}", path.path);
+    let languages = freq_list
+        .into_iter()
+        .filter(|(_, score)| *score >= 3)
+        .map(|tpl| tpl.0)
+        .collect();
 
-            return Depsfile {
-                language,
-                ..depsfile
-            };
-        }
+    Depsfile {
+        languages,
+        ..depsfile
     }
-
-    depsfile
 }
 
-fn try_determine_language(entry: &DirEntry) -> Option<Language> {
+struct LanguageMatch {
+    language: Language,
+    score: i32,
+}
+
+fn try_determine_language(entry: &DirEntry) -> Option<LanguageMatch> {
     let extension = entry.path().extension().and_then(|x| x.to_str())?;
 
     match extension {
-        "cs" | "csproj" => return Some(Language::Dotnet),
-        "go" => return Some(Language::Golang),
-        "dart" => return Some(Language::Flutter),
+        "cs" => {
+            return Some(LanguageMatch {
+                language: Language::Dotnet,
+                score: 1,
+            });
+        }
+        "csproj" => {
+            return Some(LanguageMatch {
+                language: Language::Dotnet,
+                score: 5,
+            });
+        }
+        "go" => {
+            return Some(LanguageMatch {
+                language: Language::Golang,
+                score: 1,
+            });
+        }
+        "dart" => {
+            return Some(LanguageMatch {
+                language: Language::Flutter,
+                score: 1,
+            });
+        }
         _ => {}
     }
 
     match entry.file_name().to_str().unwrap_or_default() {
-        "pubspec.yaml" | "pubspec.lock" => Some(Language::Flutter),
-        "go.mod" | "go.sum" => Some(Language::Golang),
-        "kustomization.yaml" | "kustomization.yml" => Some(Language::Kustomize),
+        "pubspec.yaml" | "pubspec.lock" => Some(LanguageMatch {
+            language: Language::Flutter,
+            score: 5,
+        }),
+        "go.mod" | "go.sum" => Some(LanguageMatch {
+            language: Language::Golang,
+            score: 5,
+        }),
+        "kustomization.yaml" | "kustomization.yml" => Some(LanguageMatch {
+            language: Language::Kustomize,
+            score: 5,
+        }),
         _ => None,
     }
 }
