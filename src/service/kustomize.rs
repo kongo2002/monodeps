@@ -63,16 +63,45 @@ where
         .ok_or(anyhow!("invalid kustomization resource"))?;
 
     let yaml = load_yaml(&path)?;
+
     let resources = yaml_str_list(&yaml["resources"]);
+    let bases = yaml_str_list(&yaml["bases"]);
+    let components = yaml_str_list(&yaml["components"]);
+
+    let empty_list = Vec::new();
+    let patches: Vec<String> = yaml["patches"]
+        .as_vec()
+        .unwrap_or(&empty_list)
+        .into_iter()
+        .flat_map(|entry| entry["path"].as_str().map(|x| x.to_owned()))
+        .filter(|value| !value.is_empty())
+        .collect();
+
+    let config_map_files: Vec<String> = yaml["configMapGenerator"]
+        .as_vec()
+        .unwrap_or(&empty_list)
+        .into_iter()
+        .flat_map(|entry| yaml_str_list(&entry["files"]))
+        .collect();
+
+    let all_references = resources
+        .into_iter()
+        .chain(bases.into_iter())
+        .chain(components.into_iter())
+        .chain(patches.into_iter())
+        .chain(config_map_files.into_iter());
 
     let mut dependencies = Vec::new();
 
-    for resource in resources {
+    for resource in all_references {
         let path = kustomization_dir.join(resource);
 
         if path.is_file() {
             // the reference is a file -> keep as "direct" dependency
-            let path_str = path.to_str().ok_or(anyhow!("invalid resource file"))?;
+            let path_str = path
+                .to_str()
+                .ok_or(anyhow!("invalid resource file: '{}'", path.display()))?;
+
             let pattern = DepPattern::new(path_str, &base_dir)?;
 
             dependencies.push(pattern);
