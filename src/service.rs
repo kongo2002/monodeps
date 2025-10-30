@@ -207,19 +207,25 @@ impl Service {
                         continue;
                     }
 
+                    // read/parse dependency file (depsfile, buildfile...) and extract
+                    // any potential explicitly listed dependencies
                     let base_depsfile =
                         Depsfile::load(valid_filetype, &depsfile_location.canonicalized, root_dir)?;
 
+                    // try to determine what languages we can auto-discover
                     let depsfile = auto_discover_languages(base_depsfile, &path);
 
-                    // TODO: we may want to filter out dependencies that are within the current
-                    //  service's root directory
+                    // try to determine all dependencies of languages we detected
+                    // in this service folder
                     let auto_dependencies = depsfile
                         .languages
                         .iter()
                         .flat_map(|language| {
                             analyzer.auto_discover(language, &path.canonicalized, opts)
                         })
+                        // auto-discovered dependencies could be "anywhere", that's why we filter
+                        // out all that are directly below this service directory
+                        .filter(|dep_pattern| not_within_service(&path, &dep_pattern))
                         .collect();
 
                     let triggers = Vec::new();
@@ -236,6 +242,10 @@ impl Service {
         }
         Ok(all)
     }
+}
+
+fn not_within_service(service_dir: &PathInfo, pattern: &DepPattern) -> bool {
+    !pattern.is_child_of(&service_dir.canonicalized)
 }
 
 fn auto_discover_languages(depsfile: Depsfile, path: &PathInfo) -> Depsfile {

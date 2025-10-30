@@ -94,6 +94,13 @@ impl DepPattern {
             None => path.starts_with(&self.raw.canonicalized),
         }
     }
+
+    pub fn is_child_of(&self, canonicalized_path: &str) -> bool {
+        match &self.pattern {
+            Some(_) => false,
+            None => self.raw.canonicalized.starts_with(canonicalized_path),
+        }
+    }
 }
 
 impl Display for DepPattern {
