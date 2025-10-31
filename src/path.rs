@@ -16,9 +16,10 @@ impl PathInfo {
     {
         let base = Path::new(root_dir.as_ref()).join(path);
         let canonicalized = canonicalize(&base).or_else(|_| {
-            base.to_str()
-                .map(|x| x.to_string())
-                .ok_or(anyhow!("cannot convert dependency pattern: '{base:?}'"))
+            base.to_str().map(|x| x.to_string()).ok_or(anyhow!(
+                "cannot convert dependency pattern: '{}'",
+                base.display()
+            ))
         })?;
 
         Ok(Self {
@@ -31,9 +32,10 @@ impl PathInfo {
 pub fn canonicalize(path: &Path) -> Result<String> {
     let canonicalized = std::path::absolute(path)?;
     let cleaned = canonicalized.clean();
-    let canonical_str = cleaned
-        .to_str()
-        .ok_or(anyhow!("cannot convert file path to string"))?;
+    let canonical_str = cleaned.to_str().ok_or(anyhow!(
+        "cannot convert file path to string '{}'",
+        path.display()
+    ))?;
 
     Ok(canonical_str.to_owned())
 }
