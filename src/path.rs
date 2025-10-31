@@ -28,7 +28,7 @@ impl PathInfo {
     }
 }
 
-fn canonicalize(path: &Path) -> Result<String> {
+pub fn canonicalize(path: &Path) -> Result<String> {
     let canonicalized = std::path::absolute(path)?;
     let cleaned = canonicalized.clean();
     let canonical_str = cleaned

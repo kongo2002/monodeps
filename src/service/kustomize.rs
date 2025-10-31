@@ -1,8 +1,10 @@
+use std::collections::HashSet;
 use std::path::Path;
 
 use anyhow::{Result, anyhow};
 
 use crate::config::DepPattern;
+use crate::path::canonicalize;
 use crate::utils::{load_yaml, yaml_str_list};
 
 use super::non_hidden_files;
@@ -26,7 +28,8 @@ impl KustomizeAnalyzer {
 
             log::debug!("kustomization: analyzing file '{}'", entry.path().display());
 
-            let deps = parse_kustomization(entry.path(), &dir)?;
+            let mut visited_files = HashSet::new();
+            let deps = parse_kustomization(entry.path(), &dir, &mut visited_files)?;
 
             collected_imports.extend(deps);
         }
@@ -35,7 +38,11 @@ impl KustomizeAnalyzer {
     }
 }
 
-fn parse_kustomization_dir<P, B>(dir: P, base_dir: B) -> Result<Vec<DepPattern>>
+fn parse_kustomization_dir<P, B>(
+    dir: P,
+    base_dir: B,
+    visited: &mut HashSet<String>,
+) -> Result<Vec<DepPattern>>
 where
     P: AsRef<Path>,
     B: AsRef<Path>,
@@ -44,15 +51,19 @@ where
     let yml_candidate = dir.as_ref().join("kustomization.yml");
 
     if yaml_candidate.exists() {
-        parse_kustomization(yaml_candidate, base_dir)
+        parse_kustomization(yaml_candidate, base_dir, visited)
     } else if yml_candidate.exists() {
-        parse_kustomization(yml_candidate, base_dir)
+        parse_kustomization(yml_candidate, base_dir, visited)
     } else {
         Ok(Vec::new())
     }
 }
 
-fn parse_kustomization<P, B>(path: P, base_dir: B) -> Result<Vec<DepPattern>>
+fn parse_kustomization<P, B>(
+    path: P,
+    base_dir: B,
+    visited: &mut HashSet<String>,
+) -> Result<Vec<DepPattern>>
 where
     P: AsRef<Path>,
     B: AsRef<Path>,
@@ -61,6 +72,15 @@ where
         .as_ref()
         .parent()
         .ok_or(anyhow!("invalid kustomization resource"))?;
+
+    let canonicalized = canonicalize(path.as_ref())?;
+    if visited.contains(&canonicalized) {
+        return Err(anyhow!(
+            "cyclic dependency in kustomization '{}'",
+            path.as_ref().display()
+        ));
+    }
+    visited.insert(canonicalized);
 
     let yaml = load_yaml(&path)?;
 
@@ -107,7 +127,7 @@ where
             dependencies.push(pattern);
         } else if path.is_dir() {
             // the reference is a directory so we assume a 'kustomization.yaml'
-            dependencies.extend(parse_kustomization_dir(path, base_dir.as_ref())?);
+            dependencies.extend(parse_kustomization_dir(path, base_dir.as_ref(), visited)?);
         }
     }
 
