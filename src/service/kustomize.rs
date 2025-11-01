@@ -26,7 +26,9 @@ impl KustomizeAnalyzer {
                 continue;
             }
 
-            log::debug!("kustomization: analyzing file '{}'", entry.path().display());
+            if log::log_enabled!(log::Level::Debug) {
+                log::debug!("kustomization: analyzing file '{}'", entry.path().display());
+            }
 
             let mut visited_files = HashSet::new();
             let deps = parse_kustomization(entry.path(), &dir, &mut visited_files)?;
@@ -71,7 +73,7 @@ where
     let kustomization_dir = path
         .as_ref()
         .parent()
-        .ok_or(anyhow!("invalid kustomization resource"))?;
+        .ok_or_else(|| anyhow!("invalid kustomization resource"))?;
 
     let canonicalized = canonicalize(path.as_ref())?;
     if visited.contains(&canonicalized) {
@@ -120,7 +122,7 @@ where
             // the reference is a file -> keep as "direct" dependency
             let path_str = path
                 .to_str()
-                .ok_or(anyhow!("invalid resource file: '{}'", path.display()))?;
+                .ok_or_else(|| anyhow!("invalid resource file: '{}'", path.display()))?;
 
             let pattern = DepPattern::new(path_str, &base_dir)?;
 

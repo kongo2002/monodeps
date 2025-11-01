@@ -43,10 +43,12 @@ impl DotnetAnalyzer {
                 continue;
             }
 
-            log::debug!(
-                "dotnet: analyzing C# project file '{}'",
-                entry.path().display()
-            );
+            if log::log_enabled!(log::Level::Debug) {
+                log::debug!(
+                    "dotnet: analyzing C# project file '{}'",
+                    entry.path().display()
+                );
+            }
 
             let file_content = std::fs::read_to_string(entry.path())?;
 

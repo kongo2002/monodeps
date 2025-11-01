@@ -32,10 +32,9 @@ impl PathInfo {
 pub fn canonicalize(path: &Path) -> Result<String> {
     let canonicalized = std::path::absolute(path)?;
     let cleaned = canonicalized.clean();
-    let canonical_str = cleaned.to_str().ok_or(anyhow!(
-        "cannot convert file path to string '{}'",
-        path.display()
-    ))?;
+    let canonical_str = cleaned
+        .to_str()
+        .ok_or_else(|| anyhow!("cannot convert file path to string '{}'", path.display()))?;
 
     Ok(canonical_str.to_owned())
 }

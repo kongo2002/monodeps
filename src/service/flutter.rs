@@ -27,10 +27,12 @@ impl FlutterAnalyzer {
                 None => continue,
             };
 
-            log::debug!(
-                "flutter: analyzing dart pubspec file '{}'",
-                entry.path().display()
-            );
+            if log::log_enabled!(log::Level::Debug) {
+                log::debug!(
+                    "flutter: analyzing dart pubspec file '{}'",
+                    entry.path().display()
+                );
+            }
 
             let yaml = load_yaml(entry.path())?;
 
