@@ -129,8 +129,8 @@ For instance, you could pipe the git diff output to monodeps:
     git diff-tree --no-commit-id --name-only HEAD -r | monodeps
 
 Operations:
-    dependencies     determine dependencies (default)
-    validate <path>  validate the given service"#,
+    dependencies    determine dependencies (default)
+    validate PATH   validate the given service"#,
         exec
     );
 
