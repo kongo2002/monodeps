@@ -166,7 +166,7 @@ impl Depsfile {
     /// is expected to be a YAML file.
     pub fn load<P>(file_type: DepsfileType, file: P, root_dir: &str) -> Result<Depsfile>
     where
-        P: AsRef<Path>,
+        P: AsRef<Path> + Copy,
     {
         match file_type {
             DepsfileType::Depsfile => {
@@ -191,15 +191,20 @@ impl Depsfile {
 
     fn depsfile_from_yaml<P>(config_yaml: Yaml, file: P, root_dir: &str) -> Result<Depsfile>
     where
-        P: AsRef<Path>,
+        P: AsRef<Path> + Copy,
     {
         let languages = parse_languages(&config_yaml["languages"], file, root_dir);
         let dep_patterns = yaml_str_list(&config_yaml["dependencies"]);
 
-        // TODO: report/warn on invalid patterns?
         let dependencies = dep_patterns
             .into_iter()
-            .flat_map(|dep| DepPattern::new(&dep, root_dir))
+            .flat_map(|dep| {
+                let dependency = DepPattern::new(&dep, root_dir);
+                if let Err(_) = dependency {
+                    log::warn!("{}: invalid dependency '{}'", file.as_ref().display(), dep);
+                }
+                dependency
+            })
             .collect();
 
         Ok(Depsfile {
@@ -211,7 +216,7 @@ impl Depsfile {
     /// Try to parse the given `Yaml` into a valid `Config`
     fn buildfile_from_yaml<P>(config_yaml: Yaml, file: P, root_dir: &str) -> Result<Depsfile>
     where
-        P: AsRef<Path>,
+        P: AsRef<Path> + Copy,
     {
         let spec = &config_yaml["spec"];
         let depends_on = &spec["dependsOn"];
@@ -222,10 +227,15 @@ impl Depsfile {
         // TODO: I think builder was just a single string value instead of a list
         let languages = parse_languages(&metadata["builder"], file, root_dir);
 
-        // TODO: report/warn on invalid patterns?
         let dependencies = dep_patterns
             .into_iter()
-            .flat_map(|dep| DepPattern::new(&dep, root_dir))
+            .flat_map(|dep| {
+                let dependency = DepPattern::new(&dep, root_dir);
+                if let Err(_) = dependency {
+                    log::warn!("{}: invalid dependency '{}'", file.as_ref().display(), dep);
+                }
+                dependency
+            })
             .collect();
 
         Ok(Depsfile {
