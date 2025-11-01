@@ -39,8 +39,7 @@ impl Opts {
 
         let operation = matches
             .free
-            .iter()
-            .next()
+            .first()
             .map(|operation_str| match operation_str.as_str() {
                 "validate" => {
                     if matches.free.len() != 2 {

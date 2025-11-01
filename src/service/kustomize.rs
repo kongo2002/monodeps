@@ -92,7 +92,7 @@ where
     let patches: Vec<String> = yaml["patches"]
         .as_vec()
         .unwrap_or(&empty_list)
-        .into_iter()
+        .iter()
         .flat_map(|entry| entry["path"].as_str().map(|x| x.to_owned()))
         .filter(|value| !value.is_empty())
         .collect();
@@ -100,16 +100,16 @@ where
     let config_map_files: Vec<String> = yaml["configMapGenerator"]
         .as_vec()
         .unwrap_or(&empty_list)
-        .into_iter()
+        .iter()
         .flat_map(|entry| yaml_str_list(&entry["files"]))
         .collect();
 
     let all_references = resources
         .into_iter()
-        .chain(bases.into_iter())
-        .chain(components.into_iter())
-        .chain(patches.into_iter())
-        .chain(config_map_files.into_iter());
+        .chain(bases)
+        .chain(components)
+        .chain(patches)
+        .chain(config_map_files);
 
     let mut dependencies = Vec::new();
 

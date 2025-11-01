@@ -31,7 +31,7 @@ pub fn yaml_str_list(yaml: &Yaml) -> Vec<String> {
 
     yaml.as_vec()
         .unwrap_or(&empty_list)
-        .into_iter()
+        .iter()
         .flat_map(|entry| entry.as_str().map(|x| x.to_owned()))
         .filter(|value| !value.is_empty())
         .collect()

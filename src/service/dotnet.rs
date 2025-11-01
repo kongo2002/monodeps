@@ -69,7 +69,7 @@ impl DotnetAnalyzer {
     fn extract_project_references(
         &self,
         content: &str,
-        package_namespaces: &Vec<String>,
+        package_namespaces: &[String],
     ) -> Result<Vec<String>> {
         let parsed_xml = sxd_document::parser::parse(content)?;
         let xml_doc = parsed_xml.as_document();
@@ -111,8 +111,7 @@ fn extract_project_dir(include: &str) -> Option<Import> {
     let path = PathBuf::from(sanitized);
     let service_dir = path
         .ancestors()
-        .skip(1)
-        .next()
+        .nth(1)
         .and_then(|p| p.to_str())
         .map(|p| p.to_string())
         .filter(|p| !p.is_empty())?;

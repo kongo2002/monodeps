@@ -28,7 +28,7 @@ pub fn resolve(
         .config
         .global_dependencies
         .iter()
-        .flat_map(|d| DepPattern::new(&d, &opts.target.canonicalized))
+        .flat_map(|d| DepPattern::new(d, &opts.target.canonicalized))
     {
         if canon_changed_files
             .iter()
@@ -94,7 +94,7 @@ where
 {
     let mut changed = Vec::new();
 
-    for (_, service) in &mut *services {
+    for service in (*services).values_mut() {
         if service.has_trigger() {
             continue;
         }

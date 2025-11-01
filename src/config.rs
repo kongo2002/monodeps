@@ -78,7 +78,7 @@ impl DepPattern {
     where
         P: AsRef<Path>,
     {
-        let pattern = if dependency.contains(&['?', '*']) {
+        let pattern = if dependency.contains(['?', '*']) {
             Some(to_glob_regex(dependency)?)
         } else {
             None
@@ -170,11 +170,11 @@ impl Depsfile {
     {
         match file_type {
             DepsfileType::Depsfile => {
-                let config_yaml = load_yaml(&file)?;
+                let config_yaml = load_yaml(file)?;
                 Depsfile::depsfile_from_yaml(config_yaml, file, root_dir)
             }
             DepsfileType::Buildfile => {
-                let config_yaml = load_yaml(&file)?;
+                let config_yaml = load_yaml(file)?;
                 Depsfile::buildfile_from_yaml(config_yaml, file, root_dir)
             }
             DepsfileType::Justfile => Ok(Depsfile::empty()),
@@ -200,7 +200,7 @@ impl Depsfile {
             .into_iter()
             .flat_map(|dep| {
                 let dependency = DepPattern::new(&dep, root_dir);
-                if let Err(_) = dependency {
+                if dependency.is_err() {
                     log::warn!("{}: invalid dependency '{}'", file.as_ref().display(), dep);
                 }
                 dependency
@@ -231,7 +231,7 @@ impl Depsfile {
             .into_iter()
             .flat_map(|dep| {
                 let dependency = DepPattern::new(&dep, root_dir);
-                if let Err(_) = dependency {
+                if dependency.is_err() {
                     log::warn!("{}: invalid dependency '{}'", file.as_ref().display(), dep);
                 }
                 dependency
@@ -252,7 +252,7 @@ where
     let values = yaml_str_list(value);
     values
         .into_iter()
-        .map(|value| {
+        .filter_map(|value| {
             let converted: Language = value.as_str().into();
             if converted == Language::Unknown {
                 let path = file.as_ref().to_str().unwrap_or(root_dir);
@@ -262,7 +262,6 @@ where
                 Some(converted)
             }
         })
-        .flatten()
         .collect()
 }
 

@@ -62,10 +62,10 @@ where
             }
         } else if line.starts_with("import (") {
             in_imports = true;
-        } else if line.starts_with("import") {
-            if let Some(import) = extract_from_line(&line, config) {
-                imports.push(import);
-            }
+        } else if line.starts_with("import")
+            && let Some(import) = extract_from_line(&line, config)
+        {
+            imports.push(import);
         }
     }
 

@@ -238,7 +238,7 @@ impl Service {
             })
             // auto-discovered dependencies could be "anywhere", that's why we filter
             // out all that are directly below this service directory
-            .filter(|dep_pattern| not_within_service(&ctx.service_location, &dep_pattern))
+            .filter(|dep_pattern| not_within_service(&ctx.service_location, dep_pattern))
             .collect();
 
         let triggers = Vec::new();
@@ -378,8 +378,7 @@ where
 fn parent_dir(filename: &Path) -> Option<String> {
     let path = PathBuf::from(filename);
     path.ancestors()
-        .skip(1)
-        .next()
+        .nth(1)
         .and_then(|p| p.to_str())
         .map(|p| p.to_string())
         .filter(|p| !p.is_empty())
@@ -396,10 +395,10 @@ fn map_depsfile(filename: &str, opts: &Opts) -> Option<DepsfileType> {
 }
 
 impl ServiceContext<'_> {
-    fn from_depsfile<'a, 'b>(
+    fn from_depsfile<'a>(
         path: PathBuf,
         root_dir: &'a str,
-        opts: &'b Opts,
+        opts: &Opts,
     ) -> Option<ServiceContext<'a>> {
         let filetype = map_depsfile(path.file_name()?.to_str()?, opts)?;
 
