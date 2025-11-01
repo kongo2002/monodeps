@@ -134,8 +134,10 @@ impl Analyzer {
         match result {
             Ok(deps) => deps,
             Err(err) => {
-                let path = dir.as_ref().to_str().unwrap_or_default();
-                log::warn!("failed to auto-discover dependencies: {err} [{path}]");
+                log::warn!(
+                    "failed to auto-discover dependencies: {err} [{}]",
+                    dir.as_ref().display()
+                );
 
                 Vec::new()
             }
