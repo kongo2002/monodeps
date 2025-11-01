@@ -28,6 +28,25 @@ effort" but can ease and simplify the initial setup of a mono-repository
 considerably.
 
 
+### Auto discovery
+
+One of the ideas of *monodeps* is to come with "batteries included" as much as
+as possible. For that purpose, auto discovery of service's dependencies is one
+of the key components.
+
+As of now,the following languages/frameworks are supported:
+
+- Go
+- Flutter/Dart
+- C\# (.NET)
+- Kustomize
+
+By default, *monodeps* will try to auto-detect the mentioned language/frameworks
+based on the present files and file types. Once detected, the language specific
+dependency discovery will attempt to automatically add dependencies to the ones
+that are explicitly listed in the `Depsfile`.
+
+
 ## Installation
 
 Go to the [releases page][releases], expand the list of assets and download a
@@ -53,8 +72,9 @@ consequently fully depending on monodeps' auto-discovery capabilities.
 # monodeps will try to guess the language based on the majority of files in the
 # service directory.
 #
-# Currently supported: go/golang, csharp/dotnet, dart/flutter
-language: go
+# Currently supported: go/golang, csharp/dotnet, dart/flutter, kustomize
+languages:
+  - go
 
 # Following you can list directories of other services or files this particular
 # service is depending on. Whenever any of these files or directories are part
