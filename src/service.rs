@@ -29,6 +29,13 @@ pub enum BuildTrigger {
     GlobalDependency,
 }
 
+struct ServiceContext<'a> {
+    filetype: DepsfileType,
+    depsfile_location: PathInfo,
+    service_location: PathInfo,
+    root_dir: &'a str,
+}
+
 impl Display for BuildTrigger {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -184,50 +191,40 @@ impl Service {
         let analyzer = Analyzer::new(&opts.config);
         let root_dir = &opts.target.canonicalized;
 
-        // TODO: think about supporting both the path to the Depsfile and the service path
-        let service_location = PathInfo::new(path, root_dir)?;
+        let filename_candidates = vec![
+            None,
+            Some("Depsfile"),
+            Some("Buildfile.yaml"),
+            Some("justfile"),
+            Some("Makefile"),
+        ];
 
-        let candidates = vec!["Depsfile", "Buildfile.yaml", "justfile", "Makefile"];
-        let (depsfile, location) = candidates
+        let ctx = filename_candidates
             .into_iter()
             .flat_map(|filename| {
-                let full_path = PathBuf::from(path).join(filename);
-                let is_valid = full_path.exists() && full_path.is_file();
-                if !is_valid {
-                    return None;
-                }
-                let pathinfo = PathInfo::new(full_path.to_str()?, root_dir).ok()?;
-                let depsfile = map_depsfile(filename, opts)?;
-
-                Some((depsfile, pathinfo))
+                let full_path = match filename {
+                    None => PathBuf::from(path),
+                    Some(file) => PathBuf::from(path).join(file),
+                };
+                ServiceContext::from_depsfile(full_path, root_dir, opts)
             })
             .next()
             .ok_or_else(|| anyhow!("cannot find service root for: {}", path))?;
 
-        Service::discover_service(
-            &analyzer,
-            depsfile,
-            &location.canonicalized,
-            service_location,
-            root_dir,
-            opts,
-        )
+        Service::discover_service(&analyzer, ctx, opts)
     }
 
-    fn discover_service(
-        analyzer: &Analyzer,
-        filetype: DepsfileType,
-        canonicalized_path: &str,
-        service_location: PathInfo,
-        root_dir: &str,
-        opts: &Opts,
-    ) -> Result<Service> {
+    fn discover_service(analyzer: &Analyzer, ctx: ServiceContext, opts: &Opts) -> Result<Service> {
         // read/parse dependency file (depsfile, buildfile...) and extract
         // any potential explicitly listed dependencies
-        let base_depsfile = Depsfile::load(filetype, &canonicalized_path, root_dir)?;
+        let base_depsfile = Depsfile::load(
+            ctx.filetype,
+            &ctx.depsfile_location.canonicalized,
+            ctx.root_dir,
+        )?;
 
         // try to determine what languages we can auto-discover
-        let depsfile = auto_discover_languages(base_depsfile, &service_location);
+        let depsfile = auto_discover_languages(base_depsfile, &ctx.service_location);
 
         // try to determine all dependencies of languages we detected
         // in this service folder
@@ -235,16 +232,16 @@ impl Service {
             .languages
             .iter()
             .flat_map(|language| {
-                analyzer.auto_discover(language, &service_location.canonicalized, opts)
+                analyzer.auto_discover(language, &ctx.service_location.canonicalized, opts)
             })
             // auto-discovered dependencies could be "anywhere", that's why we filter
             // out all that are directly below this service directory
-            .filter(|dep_pattern| not_within_service(&service_location, &dep_pattern))
+            .filter(|dep_pattern| not_within_service(&ctx.service_location, &dep_pattern))
             .collect();
 
         let triggers = Vec::new();
         Ok(Service {
-            path: service_location,
+            path: ctx.service_location,
             depsfile,
             auto_dependencies,
             triggers,
@@ -257,29 +254,16 @@ impl Service {
         let mut all = Vec::new();
 
         for entry in non_hidden_files(root_dir) {
-            let filename = entry.file_name().to_str().unwrap_or("");
-            let filetype = map_depsfile(filename, opts);
-
-            if let Some(valid_filetype) = filetype {
-                if let Some((depsfile_location, service_location)) = get_locations(entry, root_dir)
-                {
-                    // when the dependency file is directly in the project root there is no real
-                    // reason to consider it because we would just return the full project
-                    if service_location.canonicalized == *root_dir {
-                        continue;
-                    }
-
-                    let service = Service::discover_service(
-                        &analyzer,
-                        valid_filetype,
-                        &depsfile_location.canonicalized,
-                        service_location,
-                        root_dir,
-                        opts,
-                    )?;
-
-                    all.push(service);
+            if let Some(ctx) = ServiceContext::from_depsfile(entry.into_path(), root_dir, opts) {
+                // when the dependency file is directly in the project root there is no real
+                // reason to consider it because we would just return the full project
+                if ctx.service_location.canonicalized == *root_dir {
+                    continue;
                 }
+
+                let service = Service::discover_service(&analyzer, ctx, opts)?;
+
+                all.push(service);
             }
         }
         Ok(all)
@@ -409,16 +393,31 @@ fn map_depsfile(filename: &str, opts: &Opts) -> Option<DepsfileType> {
     }
 }
 
-fn get_locations(entry: DirEntry, root_dir: &str) -> Option<(PathInfo, PathInfo)> {
-    let depsfile_location = entry
-        .path()
-        .to_str()
-        .and_then(|p| PathInfo::new(p, root_dir).ok())?;
+impl ServiceContext<'_> {
+    fn from_depsfile<'a, 'b>(
+        path: PathBuf,
+        root_dir: &'a str,
+        opts: &'b Opts,
+    ) -> Option<ServiceContext<'a>> {
+        let filetype = map_depsfile(path.file_name()?.to_str()?, opts)?;
 
-    let path_buf = entry.into_path();
-    let path = path_buf.parent().and_then(|p| to_pathinfo(p, root_dir))?;
+        if !path.exists() || !path.is_file() {
+            return None;
+        }
 
-    Some((depsfile_location, path))
+        let depsfile_location = path
+            .to_str()
+            .and_then(|p| PathInfo::new(p, root_dir).ok())?;
+
+        let service_location = path.parent().and_then(|p| to_pathinfo(p, root_dir))?;
+
+        Some(ServiceContext {
+            filetype,
+            depsfile_location,
+            service_location,
+            root_dir,
+        })
+    }
 }
 
 fn to_pathinfo(p: &Path, root_dir: &str) -> Option<PathInfo> {
