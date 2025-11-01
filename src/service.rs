@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use crate::cli::Opts;
 use crate::config::{Config, DepPattern, Depsfile, DepsfileType, Language};
 use crate::path::PathInfo;
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use serde::Serialize;
 use walkdir::{DirEntry, WalkDir};
 
@@ -180,6 +180,77 @@ impl Service {
         }
     }
 
+    pub fn try_determine(path: &str, opts: &Opts) -> Result<Service> {
+        let analyzer = Analyzer::new(&opts.config);
+        let root_dir = &opts.target.canonicalized;
+
+        // TODO: think about supporting both the path to the Depsfile and the service path
+        let service_location = PathInfo::new(path, root_dir)?;
+
+        let candidates = vec!["Depsfile", "Buildfile.yaml", "justfile", "Makefile"];
+        let (depsfile, location) = candidates
+            .into_iter()
+            .flat_map(|filename| {
+                let full_path = PathBuf::from(path).join(filename);
+                let is_valid = full_path.exists() && full_path.is_file();
+                if !is_valid {
+                    return None;
+                }
+                let pathinfo = PathInfo::new(full_path.to_str()?, root_dir).ok()?;
+                let depsfile = map_depsfile(filename, opts)?;
+
+                Some((depsfile, pathinfo))
+            })
+            .next()
+            .ok_or_else(|| anyhow!("cannot find service root for: {}", path))?;
+
+        Service::discover_service(
+            &analyzer,
+            depsfile,
+            &location.canonicalized,
+            service_location,
+            root_dir,
+            opts,
+        )
+    }
+
+    fn discover_service(
+        analyzer: &Analyzer,
+        filetype: DepsfileType,
+        canonicalized_path: &str,
+        service_location: PathInfo,
+        root_dir: &str,
+        opts: &Opts,
+    ) -> Result<Service> {
+        // read/parse dependency file (depsfile, buildfile...) and extract
+        // any potential explicitly listed dependencies
+        let base_depsfile = Depsfile::load(filetype, &canonicalized_path, root_dir)?;
+
+        // try to determine what languages we can auto-discover
+        let depsfile = auto_discover_languages(base_depsfile, &service_location);
+
+        // try to determine all dependencies of languages we detected
+        // in this service folder
+        let auto_dependencies = depsfile
+            .languages
+            .iter()
+            .flat_map(|language| {
+                analyzer.auto_discover(language, &service_location.canonicalized, opts)
+            })
+            // auto-discovered dependencies could be "anywhere", that's why we filter
+            // out all that are directly below this service directory
+            .filter(|dep_pattern| not_within_service(&service_location, &dep_pattern))
+            .collect();
+
+        let triggers = Vec::new();
+        Ok(Service {
+            path: service_location,
+            depsfile,
+            auto_dependencies,
+            triggers,
+        })
+    }
+
     pub fn discover(opts: &Opts) -> Result<Vec<Service>> {
         let analyzer = Analyzer::new(&opts.config);
         let root_dir = &opts.target.canonicalized;
@@ -187,54 +258,25 @@ impl Service {
 
         for entry in non_hidden_files(root_dir) {
             let filename = entry.file_name().to_str().unwrap_or("");
-            let filetype = match filename {
-                "Buildfile.yaml" => Some(DepsfileType::Buildfile),
-                "Depsfile" => Some(DepsfileType::Depsfile),
-                "justfile" => {
-                    Some(DepsfileType::Justfile).filter(|x| opts.supported_roots.contains(x))
-                }
-                "Makefile" => {
-                    Some(DepsfileType::Makefile).filter(|x| opts.supported_roots.contains(x))
-                }
-                _ => None,
-            };
+            let filetype = map_depsfile(filename, opts);
 
             if let Some(valid_filetype) = filetype {
-                if let Some((depsfile_location, path)) = get_locations(entry, root_dir) {
+                if let Some((depsfile_location, service_location)) = get_locations(entry, root_dir)
+                {
                     // when the dependency file is directly in the project root there is no real
                     // reason to consider it because we would just return the full project
-                    if path.canonicalized == *root_dir {
+                    if service_location.canonicalized == *root_dir {
                         continue;
                     }
 
-                    // read/parse dependency file (depsfile, buildfile...) and extract
-                    // any potential explicitly listed dependencies
-                    let base_depsfile =
-                        Depsfile::load(valid_filetype, &depsfile_location.canonicalized, root_dir)?;
-
-                    // try to determine what languages we can auto-discover
-                    let depsfile = auto_discover_languages(base_depsfile, &path);
-
-                    // try to determine all dependencies of languages we detected
-                    // in this service folder
-                    let auto_dependencies = depsfile
-                        .languages
-                        .iter()
-                        .flat_map(|language| {
-                            analyzer.auto_discover(language, &path.canonicalized, opts)
-                        })
-                        // auto-discovered dependencies could be "anywhere", that's why we filter
-                        // out all that are directly below this service directory
-                        .filter(|dep_pattern| not_within_service(&path, &dep_pattern))
-                        .collect();
-
-                    let triggers = Vec::new();
-                    let service = Service {
-                        path,
-                        depsfile,
-                        auto_dependencies,
-                        triggers,
-                    };
+                    let service = Service::discover_service(
+                        &analyzer,
+                        valid_filetype,
+                        &depsfile_location.canonicalized,
+                        service_location,
+                        root_dir,
+                        opts,
+                    )?;
 
                     all.push(service);
                 }
@@ -355,6 +397,16 @@ fn parent_dir(filename: &Path) -> Option<String> {
         .and_then(|p| p.to_str())
         .map(|p| p.to_string())
         .filter(|p| !p.is_empty())
+}
+
+fn map_depsfile(filename: &str, opts: &Opts) -> Option<DepsfileType> {
+    match filename {
+        "Buildfile.yaml" => Some(DepsfileType::Buildfile),
+        "Depsfile" => Some(DepsfileType::Depsfile),
+        "justfile" => Some(DepsfileType::Justfile).filter(|x| opts.supported_roots.contains(x)),
+        "Makefile" => Some(DepsfileType::Makefile).filter(|x| opts.supported_roots.contains(x)),
+        _ => None,
+    }
 }
 
 fn get_locations(entry: DirEntry, root_dir: &str) -> Option<(PathInfo, PathInfo)> {

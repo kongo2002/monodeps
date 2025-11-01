@@ -107,7 +107,7 @@ impl Display for DepPattern {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.pattern {
             Some(p) => f.write_str(p.as_str()),
-            None => f.write_str(&self.raw.path),
+            None => f.write_str(&self.raw.canonicalized),
         }
     }
 }

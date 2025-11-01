@@ -11,7 +11,7 @@ pub enum OutputFormat {
 
 pub enum Operation {
     Dependencies,
-    Validate,
+    Validate(String),
 }
 
 pub struct Opts {
@@ -20,11 +20,10 @@ pub struct Opts {
     pub output: OutputFormat,
     pub verbose: bool,
     pub supported_roots: Vec<DepsfileType>,
-    pub operation: Operation,
 }
 
 impl Opts {
-    pub fn parse() -> Result<Self> {
+    pub fn parse() -> Result<(Operation, Self)> {
         let args: Vec<_> = std::env::args().collect();
 
         let mut opts = Options::new();
@@ -43,8 +42,18 @@ impl Opts {
             .iter()
             .next()
             .map(|operation_str| match operation_str.as_str() {
-                "validate" => Operation::Validate,
-                _ => Operation::Dependencies,
+                "validate" => {
+                    if matches.free.len() != 2 {
+                        eprintln!("missing service path for 'validate'");
+                        std::process::exit(1);
+                    }
+                    Operation::Validate(matches.free[1].clone())
+                }
+                "dependencies" => Operation::Dependencies,
+                unknown => {
+                    eprintln!("unknown operation '{unknown}' [supported: validate, dependencies]");
+                    std::process::exit(1);
+                }
             })
             .unwrap_or(Operation::Dependencies);
 
@@ -82,14 +91,16 @@ impl Opts {
             supported_roots.push(DepsfileType::Justfile);
         }
 
-        Ok(Self {
-            target,
-            config,
-            output,
-            verbose,
-            supported_roots,
+        Ok((
             operation,
-        })
+            Self {
+                target,
+                config,
+                output,
+                verbose,
+                supported_roots,
+            },
+        ))
     }
 }
 
@@ -119,8 +130,8 @@ For instance, you could pipe the git diff output to monodeps:
     git diff-tree --no-commit-id --name-only HEAD -r | monodeps
 
 Operations:
-    dependencies    determine dependencies (default)
-    validate        validate the given Depsfile"#,
+    dependencies     determine dependencies (default)
+    validate <path>  validate the given service"#,
         exec
     );
 

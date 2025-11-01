@@ -12,20 +12,38 @@ mod service;
 mod utils;
 
 fn main() {
-    let opts = bail_out(Opts::parse());
+    let (operation, opts) = bail_out(Opts::parse());
 
     env_logger::Builder::from_env(Env::default().default_filter_or("warn"))
         .format_timestamp(None)
         .format_target(false)
         .init();
 
-    match opts.operation {
+    match operation {
         Operation::Dependencies => dependencies(opts),
-        Operation::Validate => validate(opts),
+        Operation::Validate(path) => validate(&path, opts),
     }
 }
 
-fn validate(_opts: Opts) {}
+fn validate(service_path: &str, opts: Opts) {
+    match service::Service::try_determine(service_path, &opts) {
+        Ok(svc) => {
+            let dependencies = svc
+                .depsfile
+                .dependencies
+                .into_iter()
+                .chain(svc.auto_dependencies);
+
+            for dependency in dependencies {
+                println!("{}", dependency)
+            }
+        }
+        Err(err) => {
+            eprintln!("failed validate service dependencies: {err}");
+            std::process::exit(1)
+        }
+    }
+}
 
 fn dependencies(opts: Opts) {
     let changed_files = bail_out(collect_changed_files());
@@ -34,7 +52,10 @@ fn dependencies(opts: Opts) {
         .and_then(|services| dependency::resolve(services, changed_files, &opts))
     {
         Ok(svs) => output(svs, opts.output, opts.verbose),
-        Err(err) => eprintln!("failed to resolve dependencies: {err}"),
+        Err(err) => {
+            eprintln!("failed to resolve dependencies: {err}");
+            std::process::exit(1)
+        }
     }
 }
 
