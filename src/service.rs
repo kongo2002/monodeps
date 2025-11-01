@@ -89,7 +89,7 @@ impl Analyzer {
             None
         };
 
-        let kustomization = if config.auto_discovery_enabled(&Language::Flutter) {
+        let kustomization = if config.auto_discovery_enabled(&Language::Kustomize) {
             Some(KustomizeAnalyzer {})
         } else {
             None
