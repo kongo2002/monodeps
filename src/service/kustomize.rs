@@ -91,20 +91,18 @@ where
     let components = yaml_str_list(&yaml["components"]);
 
     let empty_list = Vec::new();
-    let patches: Vec<String> = yaml["patches"]
+    let patches = yaml["patches"]
         .as_vec()
         .unwrap_or(&empty_list)
         .iter()
         .flat_map(|entry| entry["path"].as_str().map(|x| x.to_owned()))
-        .filter(|value| !value.is_empty())
-        .collect();
+        .filter(|value| !value.is_empty());
 
-    let config_map_files: Vec<String> = yaml["configMapGenerator"]
+    let config_map_files = yaml["configMapGenerator"]
         .as_vec()
         .unwrap_or(&empty_list)
         .iter()
-        .flat_map(|entry| yaml_str_list(&entry["files"]))
-        .collect();
+        .flat_map(|entry| yaml_str_list(&entry["files"]));
 
     let all_references = resources
         .into_iter()
@@ -118,18 +116,20 @@ where
     for resource in all_references {
         let path = kustomization_dir.join(resource);
 
-        if path.is_file() {
-            // the reference is a file -> keep as "direct" dependency
-            let path_str = path
-                .to_str()
-                .ok_or_else(|| anyhow!("invalid resource file: '{}'", path.display()))?;
+        if let Ok(metadata) = path.metadata() {
+            if metadata.is_file() {
+                // the reference is a file -> keep as "direct" dependency
+                let path_str = path
+                    .to_str()
+                    .ok_or_else(|| anyhow!("invalid resource file: '{}'", path.display()))?;
 
-            let pattern = DepPattern::new(path_str, &base_dir)?;
+                let pattern = DepPattern::new(path_str, &base_dir)?;
 
-            dependencies.push(pattern);
-        } else if path.is_dir() {
-            // the reference is a directory so we assume a 'kustomization.yaml'
-            dependencies.extend(parse_kustomization_dir(path, base_dir.as_ref(), visited)?);
+                dependencies.push(pattern);
+            } else if metadata.is_dir() {
+                // the reference is a directory so we assume a 'kustomization.yaml'
+                dependencies.extend(parse_kustomization_dir(path, base_dir.as_ref(), visited)?);
+            }
         }
     }
 

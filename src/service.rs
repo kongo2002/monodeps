@@ -419,7 +419,7 @@ impl ServiceContext<'_> {
     ) -> Option<ServiceContext<'a>> {
         let filetype = map_depsfile(path.file_name()?.to_str()?, opts)?;
 
-        if !path.exists() || !path.is_file() {
+        if !path.is_file() {
             return None;
         }
 
