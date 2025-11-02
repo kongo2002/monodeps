@@ -98,8 +98,8 @@ fn extract_from_line(line: &str, config: &GoDepsConfig) -> Option<String> {
 mod tests {
     use super::find_imports;
 
-    const GO_IMPORT01: &str = include_str!("../../tests/go_import01.go");
-    const GO_IMPORT02: &str = include_str!("../../tests/go_import02.go");
+    const GO_IMPORT01: &str = include_str!("../../tests/resources/go_import01.go");
+    const GO_IMPORT02: &str = include_str!("../../tests/resources/go_import02.go");
 
     #[test]
     fn grouped_imports_with_matching_prefix() {

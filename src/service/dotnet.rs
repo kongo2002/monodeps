@@ -127,7 +127,7 @@ fn extract_project_dir(include: &str) -> Option<Import> {
 mod tests {
     use super::DotnetAnalyzer;
 
-    const CSPROJ01: &str = include_str!("../../tests/dotnet_proj01.csproj");
+    const CSPROJ01: &str = include_str!("../../tests/resources/dotnet_proj01.csproj");
 
     #[test]
     fn extract_references() {

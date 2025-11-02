@@ -434,3 +434,176 @@ where
     let file = File::open(filename)?;
     Ok(BufReader::new(file).lines())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use anyhow::Result;
+
+    use crate::cli::Opts;
+    use crate::config::{AutoDiscoveryConfig, Config, DepsfileType, DotnetConfig, GoDepsConfig};
+    use crate::path::PathInfo;
+    use crate::{dependency, print_services};
+
+    use super::Service;
+
+    fn expect_output(services: Vec<Service>, expected_services: Vec<&str>) -> Result<()> {
+        let mut cursor = Cursor::new(Vec::new());
+        print_services(&mut cursor, services, true);
+
+        let output = String::from_utf8(cursor.into_inner())?;
+
+        for expected in expected_services {
+            assert!(output.contains(expected), "output contains '{}'", expected);
+        }
+
+        Ok(())
+    }
+
+    fn mk_opts(target: &str) -> Result<Opts> {
+        let opts = Opts {
+            target: PathInfo::new(target, "")?,
+            config: Config {
+                auto_discovery: AutoDiscoveryConfig {
+                    go: GoDepsConfig {
+                        package_prefixes: vec!["foo/bar".to_string()],
+                    },
+                    dotnet: DotnetConfig {
+                        package_namespaces: vec![],
+                    },
+                },
+                global_dependencies: vec![],
+            },
+            output: crate::cli::OutputFormat::Plain,
+            verbose: true,
+            supported_roots: vec![],
+        };
+
+        Ok(opts)
+    }
+
+    #[test]
+    fn discover_services_not_exist() -> Result<()> {
+        let opts = mk_opts("does_not_exist")?;
+        let services = Service::discover(&opts)?;
+
+        assert_eq!(true, services.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn discover_services_depsfile() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let services = Service::discover(&opts)?;
+
+        // just 1 Depsfile
+        assert_eq!(1, services.len());
+        Ok(())
+    }
+
+    #[test]
+    fn discover_services_justfile() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let justfile_opts = Opts {
+            supported_roots: vec![DepsfileType::Justfile],
+            ..opts
+        };
+        let services = Service::discover(&justfile_opts)?;
+
+        // 1 Depsfile + 2 justfiles
+        assert_eq!(3, services.len());
+        Ok(())
+    }
+
+    #[test]
+    fn discover_services_makefile() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let makefile_opts = Opts {
+            supported_roots: vec![DepsfileType::Makefile],
+            ..opts
+        };
+        let services = Service::discover(&makefile_opts)?;
+
+        // 1 Depsfile + 1 Makefile
+        assert_eq!(2, services.len());
+
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_dependencies_shared() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let all_opts = Opts {
+            supported_roots: vec![DepsfileType::Makefile, DepsfileType::Justfile],
+            ..opts
+        };
+        let services = Service::discover(&all_opts)?;
+
+        // 1 Depsfile + 1 Makefile + 2 justfile
+        assert_eq!(4, services.len());
+
+        let deps = dependency::resolve(services, vec!["shared/something".to_string()], &all_opts)?;
+
+        // - shared
+        // - service-c
+        assert_eq!(2, deps.len());
+        expect_output(deps, vec!["service-c", "shared"])?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_dependencies_one_service() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let all_opts = Opts {
+            supported_roots: vec![DepsfileType::Makefile, DepsfileType::Justfile],
+            ..opts
+        };
+        let services = Service::discover(&all_opts)?;
+
+        // 1 Depsfile + 1 Makefile + 2 justfile
+        assert_eq!(4, services.len());
+
+        let deps =
+            dependency::resolve(services, vec!["service-c/something".to_string()], &all_opts)?;
+
+        // - service-c
+        assert_eq!(1, deps.len());
+        expect_output(deps, vec!["service-c"])?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_dependencies_global() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let all_opts = Opts {
+            supported_roots: vec![DepsfileType::Makefile, DepsfileType::Justfile],
+            config: Config {
+                auto_discovery: Default::default(),
+                global_dependencies: vec![".gitlab".to_string()],
+            },
+            ..opts
+        };
+        let services = Service::discover(&all_opts)?;
+
+        // 1 Depsfile + 1 Makefile + 2 justfile
+        assert_eq!(4, services.len());
+
+        let deps = dependency::resolve(
+            services,
+            vec![".gitlab/pipeline.yml".to_string()],
+            &all_opts,
+        )?;
+
+        // - service-a
+        // - service-b
+        // - service-c
+        // - shared
+        assert_eq!(4, deps.len());
+        expect_output(deps, vec!["service-a", "service-b", "service-c", "shared"])?;
+
+        Ok(())
+    }
+}
