@@ -218,6 +218,25 @@ impl Depsfile {
             })
             .collect();
 
+        let known_keys = ["languages", "dependencies"];
+
+        // warn about unknown configuration values
+        if log::log_enabled!(log::Level::Warn) {
+            config_yaml.as_hash().iter().for_each(|hash| {
+                for unknown_key in hash
+                    .keys()
+                    .flat_map(|key| key.as_str())
+                    .filter(|key| !known_keys.contains(key))
+                {
+                    log::warn!(
+                        "{}: unknown configuration '{}'",
+                        file.as_ref().display(),
+                        unknown_key
+                    );
+                }
+            });
+        }
+
         Ok(Depsfile {
             dependencies,
             languages,
