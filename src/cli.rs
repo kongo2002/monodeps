@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use getopts::Options;
 
 use crate::config::{Config, DepsfileType};
@@ -9,6 +9,7 @@ pub enum OutputFormat {
     Json,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum Operation {
     Dependencies,
     Validate(String),
@@ -25,7 +26,10 @@ pub struct Opts {
 impl Opts {
     pub fn parse() -> Result<(Operation, Self)> {
         let args: Vec<_> = std::env::args().collect();
+        Opts::parse_args(args)
+    }
 
+    fn parse_args(args: Vec<String>) -> Result<(Operation, Self)> {
         let mut opts = Options::new();
         opts.optopt("t", "target", "target directory to operate on", "DIR");
         opts.optopt("c", "config", "configuration file", "FILE");
@@ -43,18 +47,16 @@ impl Opts {
             .map(|operation_str| match operation_str.as_str() {
                 "validate" => {
                     if matches.free.len() != 2 {
-                        eprintln!("missing service path for 'validate'");
-                        std::process::exit(1);
+                        bail!("missing service path for 'validate'");
                     }
-                    Operation::Validate(matches.free[1].clone())
+                    Ok(Operation::Validate(matches.free[1].clone()))
                 }
-                "dependencies" => Operation::Dependencies,
+                "dependencies" => Ok(Operation::Dependencies),
                 unknown => {
-                    eprintln!("unknown operation '{unknown}' [supported: validate, dependencies]");
-                    std::process::exit(1);
+                    bail!("unknown operation '{unknown}' [supported: validate, dependencies]")
                 }
             })
-            .unwrap_or(Operation::Dependencies);
+            .unwrap_or(Ok(Operation::Dependencies))?;
 
         // print help/usage
         if matches.opt_present("h") {
@@ -135,4 +137,67 @@ Operations:
     );
 
     print!("{}", opts.usage(&brief));
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+
+    use crate::cli::Operation;
+
+    use super::Opts;
+
+    fn args(additional_args: Vec<&str>) -> Result<(Operation, Opts)> {
+        let all_args = Vec::from(["monodeps".to_string()])
+            .into_iter()
+            .chain(additional_args.iter().map(|val| val.to_string()))
+            .collect();
+
+        Opts::parse_args(all_args)
+    }
+
+    #[test]
+    fn empty_args() -> Result<()> {
+        let (operation, _opts) = args(vec![])?;
+
+        assert_eq!(Operation::Dependencies, operation);
+
+        Ok(())
+    }
+
+    #[test]
+    fn operation_dependencies() -> Result<()> {
+        let (operation, _opts) = args(vec!["dependencies"])?;
+
+        assert_eq!(Operation::Dependencies, operation);
+
+        Ok(())
+    }
+
+    #[test]
+    fn operation_validate() -> Result<()> {
+        let (operation, _opts) = args(vec!["validate", "something"])?;
+
+        assert_eq!(Operation::Validate("something".to_string()), operation);
+
+        Ok(())
+    }
+
+    #[test]
+    fn operation_validate_error() -> Result<()> {
+        let result = args(vec!["validate"]);
+
+        assert!(result.is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn operation_unknown() -> Result<()> {
+        let result = args(vec!["whatever"]);
+
+        assert!(result.is_err());
+
+        Ok(())
+    }
 }
