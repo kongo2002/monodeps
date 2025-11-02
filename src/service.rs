@@ -598,8 +598,14 @@ mod tests {
         // 1 Depsfile + 1 Makefile + 2 justfile
         assert_eq!(4, services.len());
 
-        let deps =
-            dependency::resolve(services, vec!["service-c/something".to_string()], &all_opts)?;
+        let deps = dependency::resolve(
+            services,
+            vec![
+                "service-c/something".to_string(),
+                "non-existing-folder/something".to_string(),
+            ],
+            &all_opts,
+        )?;
 
         // - service-c
         assert_eq!(1, deps.len());

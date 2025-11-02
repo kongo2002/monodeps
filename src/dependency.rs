@@ -53,8 +53,8 @@ pub fn resolve(
         if let Some(svc) = check_file_dependency(&mut service_map, changed_file, opts)? {
             updated.push(svc);
         } else {
-            eprintln!(
-                "cannot find associated service for {} - ignoring",
+            log::warn!(
+                "{}: cannot find associated service - ignoring",
                 changed_file.path
             );
         }
