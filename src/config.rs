@@ -8,24 +8,24 @@ use yaml_rust::Yaml;
 use crate::path::PathInfo;
 use crate::utils::{load_yaml, yaml_str_list};
 
-#[derive(Default)]
+#[derive(Default, Debug, PartialEq)]
 pub struct Config {
     pub auto_discovery: AutoDiscoveryConfig,
     pub global_dependencies: Vec<String>,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, PartialEq)]
 pub struct AutoDiscoveryConfig {
     pub go: GoDepsConfig,
     pub dotnet: DotnetConfig,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, PartialEq)]
 pub struct GoDepsConfig {
     pub package_prefixes: Vec<String>,
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, PartialEq)]
 pub struct DotnetConfig {
     pub package_namespaces: Vec<String>,
 }
@@ -224,8 +224,12 @@ impl Depsfile {
 
         let metadata = &config_yaml["metadata"];
 
-        // TODO: I think builder was just a single string value instead of a list
-        let languages = parse_languages(&metadata["builder"], file, root_dir);
+        let languages: Vec<Language> = metadata["builder"]
+            .as_str()
+            .map(|value| value.into())
+            .filter(|lang| *lang != Language::Unknown)
+            .into_iter()
+            .collect();
 
         let dependencies = dep_patterns
             .into_iter()
@@ -267,11 +271,19 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::fs::File;
+    use std::io::Write;
+    use std::path::Path;
+
+    use anyhow::Result;
+    use tempfile::TempDir;
     use yaml_rust::{Yaml, YamlLoader};
 
-    use crate::config::Depsfile;
+    use crate::config::{
+        AutoDiscoveryConfig, Depsfile, DepsfileType, DotnetConfig, GoDepsConfig, Language,
+    };
 
-    use super::DepPattern;
+    use super::{Config, DepPattern};
 
     fn absolute(path: &str) -> String {
         std::path::absolute(path)
@@ -281,11 +293,138 @@ mod tests {
             .to_owned()
     }
 
-    #[test]
-    fn load_config_empty() {
-        let config = Depsfile::depsfile_from_yaml(Yaml::from_str(""), "", "");
+    fn create_file(dir: &Path, name: &str, content: &str) -> Result<()> {
+        let path = dir.join(name);
+        let mut file = File::create(path)?;
+        file.write_all(content.as_bytes())?;
+        Ok(())
+    }
 
-        assert_eq!(config.is_ok(), true);
+    fn tmp() -> Result<TempDir> {
+        Ok(tempfile::Builder::default().prefix("mdtest").tempdir()?)
+    }
+
+    #[test]
+    fn load_config() -> Result<()> {
+        let dir = tmp()?;
+        let config_name = "config.yaml";
+
+        create_file(
+            &dir.path(),
+            config_name,
+            r#"
+auto_discovery:
+  go:
+    package_prefixes:
+      - foo/bar
+  dotnet:
+    package_namespaces:
+      - Foo.Bar
+global_dependencies:
+  - justfile
+"#,
+        )?;
+
+        let result = Config::new(dir.path().join(config_name).to_str().unwrap())?;
+
+        assert_eq!(
+            Config {
+                auto_discovery: AutoDiscoveryConfig {
+                    go: GoDepsConfig {
+                        package_prefixes: vec!["foo/bar".to_string()]
+                    },
+                    dotnet: DotnetConfig {
+                        package_namespaces: vec!["Foo.Bar".to_string()]
+                    }
+                },
+                global_dependencies: vec!["justfile".to_string()]
+            },
+            result
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn load_depsfile_empty() {
+        let depsfile = Depsfile::depsfile_from_yaml(Yaml::from_str(""), "", "");
+
+        assert_eq!(depsfile.is_ok(), true);
+    }
+
+    #[test]
+    fn load_depsfile() -> Result<()> {
+        let dir = tmp()?;
+        let file_name = "Depsfile";
+
+        create_file(
+            &dir.path(),
+            file_name,
+            r#"
+languages:
+  - go
+  - dotnet
+dependencies:
+  - ../shared/auth
+"#,
+        )?;
+
+        let depsfile = Depsfile::load(DepsfileType::Depsfile, &dir.path().join(file_name), ".")?;
+
+        assert_eq!(vec![Language::Golang, Language::Dotnet], depsfile.languages);
+        assert_eq!(1, depsfile.dependencies.len());
+
+        Ok(())
+    }
+
+    #[test]
+    fn load_buildfile() -> Result<()> {
+        let dir = tmp()?;
+        let file_name = "Buildfile.yaml";
+
+        create_file(
+            &dir.path(),
+            file_name,
+            r#"
+spec:
+  dependsOn:
+    - ../shared/auth
+metadata:
+  builder: go
+"#,
+        )?;
+
+        let depsfile = Depsfile::load(DepsfileType::Buildfile, &dir.path().join(file_name), ".")?;
+
+        assert_eq!(vec![Language::Golang], depsfile.languages);
+        assert_eq!(1, depsfile.dependencies.len());
+
+        Ok(())
+    }
+
+    #[test]
+    fn load_buildfile_unknown_language() -> Result<()> {
+        let dir = tmp()?;
+        let file_name = "Buildfile.yaml";
+
+        create_file(
+            &dir.path(),
+            file_name,
+            r#"
+spec:
+  dependsOn:
+    - ../shared/auth
+metadata:
+  builder: whatever
+"#,
+        )?;
+
+        let depsfile = Depsfile::load(DepsfileType::Buildfile, &dir.path().join(file_name), ".")?;
+
+        assert_eq!(true, depsfile.languages.is_empty());
+        assert_eq!(1, depsfile.dependencies.len());
+
+        Ok(())
     }
 
     #[test]
