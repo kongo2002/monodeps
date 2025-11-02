@@ -596,7 +596,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_dependencies_k8s() -> Result<()> {
+    fn resolve_dependencies_k8s_patch() -> Result<()> {
         let opts = mk_opts("./tests/examples/full")?;
         let justfile_opts = Opts {
             supported_roots: vec![DepsfileType::Justfile],
@@ -610,6 +610,31 @@ mod tests {
         let deps = dependency::resolve(
             services,
             vec!["k8s/base/patch.yaml".to_string()],
+            &justfile_opts,
+        )?;
+
+        // - service-d
+        assert_eq!(1, deps.len());
+        expect_output(deps, vec!["service-d"])?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_dependencies_k8s() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let justfile_opts = Opts {
+            supported_roots: vec![DepsfileType::Justfile],
+            ..opts
+        };
+        let services = Service::discover(&justfile_opts)?;
+
+        // 1 Depsfile + 3 justfile
+        assert_eq!(4, services.len());
+
+        let deps = dependency::resolve(
+            services,
+            vec!["k8s/base/kustomization.yaml".to_string()],
             &justfile_opts,
         )?;
 

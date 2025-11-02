@@ -113,22 +113,37 @@ where
 
     let mut dependencies = Vec::new();
 
-    for resource in all_references {
-        let path = kustomization_dir.join(resource);
+    // we have to add the kustomization file itself too
+    dependencies.push(DepPattern::new(
+        path.as_ref().to_str().ok_or_else(|| {
+            anyhow!(
+                "cannot determine dependency path: {}",
+                path.as_ref().display()
+            )
+        })?,
+        &base_dir,
+    )?);
 
-        if let Ok(metadata) = path.metadata() {
+    for resource in all_references {
+        let resource_path = kustomization_dir.join(resource);
+
+        if let Ok(metadata) = resource_path.metadata() {
             if metadata.is_file() {
                 // the reference is a file -> keep as "direct" dependency
-                let path_str = path
-                    .to_str()
-                    .ok_or_else(|| anyhow!("invalid resource file: '{}'", path.display()))?;
+                let path_str = resource_path.to_str().ok_or_else(|| {
+                    anyhow!("invalid resource file: '{}'", resource_path.display())
+                })?;
 
                 let pattern = DepPattern::new(path_str, &base_dir)?;
 
                 dependencies.push(pattern);
             } else if metadata.is_dir() {
                 // the reference is a directory so we assume a 'kustomization.yaml'
-                dependencies.extend(parse_kustomization_dir(path, base_dir.as_ref(), visited)?);
+                dependencies.extend(parse_kustomization_dir(
+                    resource_path,
+                    base_dir.as_ref(),
+                    visited,
+                )?);
             }
         }
     }
@@ -154,6 +169,19 @@ mod tests {
         Ok(tempfile::Builder::default().prefix("mdtest").tempdir()?)
     }
 
+    fn distinct_deps(dependencies: Vec<DepPattern>) -> usize {
+        let mut non_hashes = 0usize;
+        let mut uniques = HashSet::new();
+        for dep in dependencies {
+            if let Some(hash) = dep.hash() {
+                uniques.insert(hash.to_owned());
+            } else {
+                non_hashes += 1;
+            }
+        }
+        uniques.len() + non_hashes
+    }
+
     #[test]
     fn test_simple_kustomization() -> Result<()> {
         let dir = tmp()?;
@@ -174,7 +202,8 @@ resources:
         let analyzer = KustomizeAnalyzer {};
         let deps = analyzer.dependencies(base_dir)?;
 
-        assert_eq!(deps.len(), 2);
+        // 2 resources + kustomization.yaml
+        assert_eq!(distinct_deps(deps), 3);
 
         Ok(())
     }
@@ -208,7 +237,10 @@ resources:
         let analyzer = KustomizeAnalyzer {};
         let deps = analyzer.dependencies(base_dir)?;
 
-        assert_eq!(deps.len(), 2);
+        dbg!(&deps);
+
+        // 1 resource + 2 kustomization.yaml
+        assert_eq!(distinct_deps(deps), 3);
 
         Ok(())
     }
@@ -257,7 +289,8 @@ resources:
         let analyzer = KustomizeAnalyzer {};
         let deps = analyzer.dependencies(base_dir)?;
 
-        assert_eq!(deps.len(), 4);
+        // 3 resources + 2 kustomization.yaml
+        assert_eq!(distinct_deps(deps), 5);
 
         Ok(())
     }
@@ -288,7 +321,8 @@ configMapGenerator:
         let analyzer = KustomizeAnalyzer {};
         let deps = analyzer.dependencies(base_dir)?;
 
-        assert_eq!(deps.len(), 3);
+        // 3 resources + kustomization.yaml
+        assert_eq!(distinct_deps(deps), 4);
 
         Ok(())
     }
@@ -354,7 +388,7 @@ resources:
         let analyzer = KustomizeAnalyzer {};
         let deps = analyzer.dependencies(base_dir)?;
 
-        assert!(deps.is_empty());
+        assert_eq!(distinct_deps(deps), 1);
 
         Ok(())
     }
@@ -369,7 +403,7 @@ resources:
         let analyzer = KustomizeAnalyzer {};
         let deps = analyzer.dependencies(base_dir)?;
 
-        assert!(deps.is_empty());
+        assert_eq!(distinct_deps(deps), 1);
 
         Ok(())
     }
@@ -391,7 +425,7 @@ resources:
         let analyzer = KustomizeAnalyzer {};
         let deps = analyzer.dependencies(base_dir)?;
 
-        assert!(deps.is_empty());
+        assert_eq!(distinct_deps(deps), 1);
 
         Ok(())
     }
