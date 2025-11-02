@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Lines};
@@ -241,6 +241,7 @@ impl Service {
 
         // try to determine all dependencies of languages we detected
         // in this service folder
+        let mut unique_auto_dep_paths = HashSet::new();
         let auto_dependencies = depsfile
             .languages
             .iter()
@@ -253,9 +254,17 @@ impl Service {
                         pattern,
                     })
             })
-            // auto-discovered dependencies could be "anywhere", that's why we filter
-            // out all that are directly below this service directory
-            .filter(|auto_dep| not_within_service(&ctx.service_location, &auto_dep.pattern))
+            .filter(|auto_dep| {
+                // auto-discovered dependencies could be "anywhere", that's why we filter
+                // out all that are directly below this service directory
+                not_within_service(&ctx.service_location, &auto_dep.pattern)
+                    // moreover we filter out all obvious duplicates
+                    && auto_dep
+                        .pattern
+                        .hash()
+                        .map(|hash| unique_auto_dep_paths.insert(hash.to_owned()))
+                        .unwrap_or(true)
+            })
             .collect();
 
         let triggers = Vec::new();
@@ -534,8 +543,8 @@ mod tests {
         };
         let services = Service::discover(&justfile_opts)?;
 
-        // 1 Depsfile + 2 justfiles
-        assert_eq!(3, services.len());
+        // 1 Depsfile + 3 justfiles
+        assert_eq!(4, services.len());
 
         let service_a = get_service(services, "service-a");
 
@@ -572,8 +581,8 @@ mod tests {
         };
         let services = Service::discover(&all_opts)?;
 
-        // 1 Depsfile + 1 Makefile + 2 justfile
-        assert_eq!(4, services.len());
+        // 1 Depsfile + 1 Makefile + 3 justfile
+        assert_eq!(5, services.len());
 
         let deps = dependency::resolve(services, vec!["shared/something".to_string()], &all_opts)?;
 
@@ -587,6 +596,31 @@ mod tests {
     }
 
     #[test]
+    fn resolve_dependencies_k8s() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let justfile_opts = Opts {
+            supported_roots: vec![DepsfileType::Justfile],
+            ..opts
+        };
+        let services = Service::discover(&justfile_opts)?;
+
+        // 1 Depsfile + 3 justfile
+        assert_eq!(4, services.len());
+
+        let deps = dependency::resolve(
+            services,
+            vec!["k8s/base/patch.yaml".to_string()],
+            &justfile_opts,
+        )?;
+
+        // - service-d
+        assert_eq!(1, deps.len());
+        expect_output(deps, vec!["service-d"])?;
+
+        Ok(())
+    }
+
+    #[test]
     fn resolve_dependencies_one_service() -> Result<()> {
         let opts = mk_opts("./tests/examples/full")?;
         let all_opts = Opts {
@@ -595,8 +629,8 @@ mod tests {
         };
         let services = Service::discover(&all_opts)?;
 
-        // 1 Depsfile + 1 Makefile + 2 justfile
-        assert_eq!(4, services.len());
+        // 1 Depsfile + 1 Makefile + 3 justfile
+        assert_eq!(5, services.len());
 
         let deps = dependency::resolve(
             services,
@@ -627,8 +661,8 @@ mod tests {
         };
         let services = Service::discover(&all_opts)?;
 
-        // 1 Depsfile + 1 Makefile + 2 justfile
-        assert_eq!(4, services.len());
+        // 1 Depsfile + 1 Makefile + 3 justfile
+        assert_eq!(5, services.len());
 
         let deps = dependency::resolve(
             services,
@@ -639,9 +673,13 @@ mod tests {
         // - service-a
         // - service-b
         // - service-c
+        // - service-d
         // - shared
-        assert_eq!(4, deps.len());
-        expect_output(deps, vec!["service-a", "service-b", "service-c", "shared"])?;
+        assert_eq!(5, deps.len());
+        expect_output(
+            deps,
+            vec!["service-a", "service-b", "service-c", "service-d", "shared"],
+        )?;
 
         Ok(())
     }

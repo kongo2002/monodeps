@@ -100,6 +100,13 @@ impl DepPattern {
             None => self.raw.canonicalized.starts_with(canonicalized_path),
         }
     }
+
+    pub fn hash(&self) -> Option<&str> {
+        match self.pattern {
+            Some(_) => None,
+            None => Some(&self.raw.canonicalized),
+        }
+    }
 }
 
 impl Display for DepPattern {
