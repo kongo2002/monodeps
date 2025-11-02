@@ -34,7 +34,7 @@ One of the ideas of *monodeps* is to come with "batteries included" as much as
 as possible. For that purpose, auto discovery of service's dependencies is one
 of the key components.
 
-As of now,the following languages/frameworks are supported:
+As of now, the following languages/frameworks are supported:
 
 - Go
 - Flutter/Dart
@@ -47,6 +47,18 @@ dependency discovery will attempt to automatically add dependencies to the ones
 that are explicitly listed in the `Depsfile`.
 
 
+### Service discovery
+
+In order to know what directories are build units, *monodeps* will determine
+which folders are potential "service roots". By default, every folder that
+contains a `Depsfile` will be considered a "service".
+
+Moreover you can toggle via `--makefile` and `--justfile` to also consider every
+folder that contains either a `Makefile` or `justfile` as service roots
+respectively. Of course, in that case you are solely relying on the
+auto-discovery feature to determine dependencies.
+
+
 ## Installation
 
 Go to the [releases page][releases], expand the list of assets and download a
@@ -54,7 +66,7 @@ ready-to-run binary.
 
 
 ## Configuration
-
+c
 In terms of configuration there are two components: a global, optional
 configuration file on a per-repository base and a `Depsfile` for each service
 that is built and deployed in CI/CD.
@@ -67,15 +79,6 @@ All components of the file are optional, meaning an empty file can work as well,
 consequently fully depending on monodeps' auto-discovery capabilities.
 
 ```yaml
-# Specifying the language of the respective service helps monodeps to know what
-# files to look for in terms of auto-discovering dependencies. Otherwise,
-# monodeps will try to guess the language based on the majority of files in the
-# service directory.
-#
-# Currently supported: go/golang, csharp/dotnet, dart/flutter, kustomize
-languages:
-  - go
-
 # Following you can list directories of other services or files this particular
 # service is depending on. Whenever any of these files or directories are part
 # of the changed input files, this service will be candidate for build and
@@ -84,6 +87,15 @@ dependencies:
   - ../../services/auth-service
   - ../../shared/postgres
   - ../../shared/pagination
+
+# Specifying the language of the respective service helps monodeps to know what
+# files to look for in terms of auto-discovering dependencies. Otherwise,
+# monodeps will try to guess the language based on the majority of files in the
+# service directory.
+#
+# Currently supported: go/golang, csharp/dotnet, dart/flutter, kustomize
+languages:
+  - go
 ```
 
 
