@@ -478,13 +478,19 @@ mod tests {
         Ok(())
     }
 
+    fn get_service(services: Vec<Service>, name: &str) -> Option<Service> {
+        services
+            .into_iter()
+            .find(|svc| svc.path.path.ends_with(name))
+    }
+
     fn mk_opts(target: &str) -> Result<Opts> {
         let opts = Opts {
             target: PathInfo::new(target, "")?,
             config: Config {
                 auto_discovery: AutoDiscoveryConfig {
                     go: GoDepsConfig {
-                        package_prefixes: vec!["foo/bar".to_string()],
+                        package_prefixes: vec!["dev.azure.com/foo/bar".to_string()],
                     },
                     dotnet: DotnetConfig {
                         package_namespaces: vec![],
@@ -530,6 +536,15 @@ mod tests {
 
         // 1 Depsfile + 2 justfiles
         assert_eq!(3, services.len());
+
+        let service_a = get_service(services, "service-a");
+
+        assert!(service_a.is_some(), "service-a was not discovered");
+
+        // - shared/something
+        // - pkg/some
+        assert_eq!(2, service_a.unwrap().auto_dependencies.len());
+
         Ok(())
     }
 
@@ -563,9 +578,10 @@ mod tests {
         let deps = dependency::resolve(services, vec!["shared/something".to_string()], &all_opts)?;
 
         // - shared
+        // - service-a
         // - service-c
-        assert_eq!(2, deps.len());
-        expect_output(deps, vec!["service-c", "shared"])?;
+        assert_eq!(3, deps.len());
+        expect_output(deps, vec!["service-a", "service-c", "shared"])?;
 
         Ok(())
     }
