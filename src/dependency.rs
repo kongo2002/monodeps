@@ -99,30 +99,38 @@ where
             continue;
         }
 
-        'outer: for changed_file in changed_files {
-            for dep in &service.depsfile.dependencies {
-                if dep.is_match(&changed_file.canonicalized) {
-                    changed.push(service.path.clone());
-                    service.trigger(trigger(changed_file.path.clone(), false));
-
-                    // we found _some_ dependency on that service, continue with next one
-                    break 'outer;
-                }
-            }
-
-            for dep in &service.auto_dependencies {
-                if dep.pattern.is_match(&changed_file.canonicalized) {
-                    changed.push(service.path.clone());
-                    service.trigger(trigger(changed_file.path.clone(), true));
-
-                    // we found _some_ dependency on that service, continue with next one
-                    break 'outer;
-                }
-            }
+        if let Some((file_dependency, auto_dependency)) =
+            service_has_dependency(service, changed_files)
+        {
+            changed.push(service.path.clone());
+            service.trigger(trigger(file_dependency.path.clone(), auto_dependency));
         }
     }
 
     Ok(changed)
+}
+
+fn service_has_dependency<'a>(
+    service: &Service,
+    changed_files: &'a Vec<PathInfo>,
+) -> Option<(&'a PathInfo, bool)> {
+    for changed_file in changed_files {
+        for dep in &service.depsfile.dependencies {
+            if dep.is_match(&changed_file.canonicalized) {
+                // we found _some_ dependency on that service -> return early
+                return Some((changed_file, false));
+            }
+        }
+
+        for dep in &service.auto_dependencies {
+            if dep.pattern.is_match(&changed_file.canonicalized) {
+                // we found _some_ dependency on that service -> return early
+                return Some((changed_file, true));
+            }
+        }
+    }
+
+    None
 }
 
 fn check_file_dependency(
