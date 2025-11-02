@@ -128,7 +128,6 @@ impl Analyzer {
                 .as_ref()
                 .map(|analyzer| analyzer.dependencies(&dir))
                 .unwrap_or_else(|| Ok(Vec::new())),
-            Language::Unknown => Ok(Vec::new()),
         };
 
         match result {
@@ -149,8 +148,14 @@ impl Analyzer {
 pub struct Service {
     pub path: PathInfo,
     pub depsfile: Depsfile,
-    pub auto_dependencies: Vec<DepPattern>,
+    pub auto_dependencies: Vec<AutoDependency>,
     pub triggers: Vec<BuildTrigger>,
+}
+
+#[derive(Debug)]
+pub struct AutoDependency {
+    pub language: Language,
+    pub pattern: DepPattern,
 }
 
 impl Display for Service {
@@ -175,6 +180,12 @@ impl Display for Service {
         }
 
         f.write_str("]}")
+    }
+}
+
+impl Display for AutoDependency {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{} [{}]", self.pattern, self.language))
     }
 }
 
@@ -234,11 +245,17 @@ impl Service {
             .languages
             .iter()
             .flat_map(|language| {
-                analyzer.auto_discover(language, &ctx.service_location.canonicalized, opts)
+                analyzer
+                    .auto_discover(language, &ctx.service_location.canonicalized, opts)
+                    .into_iter()
+                    .map(|pattern| AutoDependency {
+                        language: *language,
+                        pattern,
+                    })
             })
             // auto-discovered dependencies could be "anywhere", that's why we filter
             // out all that are directly below this service directory
-            .filter(|dep_pattern| not_within_service(&ctx.service_location, dep_pattern))
+            .filter(|auto_dep| not_within_service(&ctx.service_location, &auto_dep.pattern))
             .collect();
 
         let triggers = Vec::new();

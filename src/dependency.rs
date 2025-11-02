@@ -111,7 +111,7 @@ where
             }
 
             for dep in &service.auto_dependencies {
-                if dep.is_match(&changed_file.canonicalized) {
+                if dep.pattern.is_match(&changed_file.canonicalized) {
                     changed.push(service.path.clone());
                     service.trigger(trigger(changed_file.path.clone(), true));
 

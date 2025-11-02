@@ -62,7 +62,6 @@ impl Config {
             Language::Dotnet => true,
             Language::Flutter => true,
             Language::Kustomize => true,
-            Language::Unknown => false,
         }
     }
 }
@@ -123,26 +122,38 @@ fn to_glob_regex(pattern: &str) -> Result<Regex> {
     Ok(rgx)
 }
 
-#[derive(Debug, Eq, PartialEq, Hash)]
+#[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
 pub enum Language {
     Golang,
     Dotnet,
     Flutter,
     Kustomize,
-    Unknown,
 }
 
-impl From<&str> for Language {
-    fn from(value: &str) -> Self {
+impl Display for Language {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Language::Golang => f.write_str("go"),
+            Language::Dotnet => f.write_str("C#"),
+            Language::Flutter => f.write_str("flutter"),
+            Language::Kustomize => f.write_str("kustomize"),
+        }
+    }
+}
+
+impl TryFrom<&str> for Language {
+    type Error = String;
+
+    fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         match value {
-            "go" => Language::Golang,
-            "golang" => Language::Golang,
-            "dotnet" => Language::Dotnet,
-            "csharp" => Language::Dotnet,
-            "dart" => Language::Flutter,
-            "flutter" => Language::Flutter,
-            "kustomize" => Language::Kustomize,
-            _ => Language::Unknown,
+            "go" => Ok(Language::Golang),
+            "golang" => Ok(Language::Golang),
+            "dotnet" => Ok(Language::Dotnet),
+            "csharp" => Ok(Language::Dotnet),
+            "dart" => Ok(Language::Flutter),
+            "flutter" => Ok(Language::Flutter),
+            "kustomize" => Ok(Language::Kustomize),
+            unknown => Err(format!("unknown language: {}", unknown)),
         }
     }
 }
@@ -226,9 +237,9 @@ impl Depsfile {
 
         let languages: Vec<Language> = metadata["builder"]
             .as_str()
-            .map(|value| value.into())
-            .filter(|lang| *lang != Language::Unknown)
+            .map(|value| value.try_into().ok())
             .into_iter()
+            .flatten()
             .collect();
 
         let dependencies = dep_patterns
@@ -256,14 +267,12 @@ where
     let values = yaml_str_list(value);
     values
         .into_iter()
-        .filter_map(|value| {
-            let converted: Language = value.as_str().into();
-            if converted == Language::Unknown {
+        .filter_map(|value| match value.as_str().try_into() {
+            Ok(language) => Some(language),
+            Err(err) => {
                 let path = file.as_ref().to_str().unwrap_or(root_dir);
-                log::warn!("unknown language '{value}' [{path}]");
+                log::warn!("{path}: {err}");
                 None
-            } else {
-                Some(converted)
             }
         })
         .collect()

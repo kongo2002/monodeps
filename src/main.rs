@@ -28,14 +28,20 @@ fn main() {
 fn validate(service_path: &str, opts: Opts) {
     match service::Service::try_determine(service_path, &opts) {
         Ok(svc) => {
-            let dependencies = svc
-                .depsfile
-                .dependencies
-                .into_iter()
-                .chain(svc.auto_dependencies);
+            if !svc.depsfile.dependencies.is_empty() {
+                println!("Dependencies (configured):");
 
-            for dependency in dependencies {
-                println!("{}", dependency)
+                for dependency in svc.depsfile.dependencies {
+                    println!("  - {}", dependency)
+                }
+            }
+
+            if !svc.auto_dependencies.is_empty() {
+                println!("Dependencies (auto-discovered):");
+
+                for dependency in svc.auto_dependencies {
+                    println!("  - {} [{}]", dependency.pattern, dependency.language)
+                }
             }
         }
         Err(err) => {
