@@ -133,12 +133,9 @@ fn check_file_dependency(
     let file_path = std::path::PathBuf::from(&pattern.canonicalized);
 
     for path in file_path.ancestors().skip(1) {
-        let str_path = path.to_str().ok_or_else(|| {
-            anyhow!(
-                "cannot determine parent path for {}",
-                file_path.to_string_lossy()
-            )
-        })?;
+        let str_path = path
+            .to_str()
+            .ok_or_else(|| anyhow!("cannot determine parent path for {}", file_path.display()))?;
 
         if let Some(entry) = services.get_mut(str_path) {
             entry.trigger(BuildTrigger::FileChange);
