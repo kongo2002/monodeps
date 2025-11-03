@@ -3,14 +3,27 @@ use std::path::Path;
 use yaml_rust::Yaml;
 
 use crate::config::DepPattern;
+use crate::path::PathInfo;
 use crate::service::parent_dir;
-use crate::utils::load_yaml;
+use crate::utils::{load_yaml, yaml_str_list};
 
 use super::non_hidden_files;
 
-pub(super) struct FlutterAnalyzer {}
+struct Workspace {
+    dependencies: Vec<DepPattern>,
+}
+
+pub(super) struct FlutterAnalyzer {
+    workspace: Option<Workspace>,
+}
 
 impl FlutterAnalyzer {
+    pub(super) fn new(root: &PathInfo) -> Self {
+        let workspace = try_parse_workspace_pubspec(root);
+
+        Self { workspace }
+    }
+
     pub(super) fn dependencies<P>(&self, dir: P) -> Result<Vec<DepPattern>>
     where
         P: AsRef<Path>,
@@ -35,6 +48,19 @@ impl FlutterAnalyzer {
             }
 
             let yaml = load_yaml(entry.path())?;
+
+            if let Some(workspace) = &self.workspace {
+                let is_part_of_workspace = yaml["resolution"]
+                    .as_str()
+                    .map(|resolution| resolution.eq_ignore_ascii_case("workspace"))
+                    .unwrap_or(false);
+
+                // we could also check if the package is _really_ listed in the workspaces
+                // but usually that would fail the dependency resolution anyways
+                if is_part_of_workspace {
+                    dependencies.extend(workspace.dependencies.clone());
+                }
+            }
 
             // regular lib dependencies
             dependencies.extend(
@@ -66,4 +92,24 @@ fn find_local_dependencies(dependencies: &Yaml, pubspec_dir: &str) -> Option<Vec
     }
 
     Some(collected)
+}
+
+fn try_parse_workspace_pubspec(root: &PathInfo) -> Option<Workspace> {
+    let path = PathInfo::new("pubspec.yaml", &root.canonicalized).ok()?;
+    let yaml = load_yaml(&path.canonicalized).ok()?;
+    let references = yaml_str_list(&yaml["workspace"]);
+    let workspaces: Vec<_> = references
+        .into_iter()
+        .flat_map(|reference| DepPattern::new(&reference, &root.canonicalized))
+        .collect();
+
+    if workspaces.is_empty() {
+        None
+    } else {
+        let yaml = DepPattern::new("pubspec.yaml", &root.canonicalized).ok()?;
+        let lockfile = DepPattern::new("pubspec.lock", &root.canonicalized).ok()?;
+        let dependencies = vec![yaml, lockfile];
+
+        Some(Workspace { dependencies })
+    }
 }

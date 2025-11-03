@@ -5,7 +5,7 @@ use std::io::{BufRead, BufReader, Lines};
 use std::path::{Path, PathBuf};
 
 use crate::cli::Opts;
-use crate::config::{Config, DepPattern, Depsfile, DepsfileType, Language};
+use crate::config::{DepPattern, Depsfile, DepsfileType, Language};
 use crate::path::PathInfo;
 use anyhow::{Result, anyhow};
 use serde::Serialize;
@@ -65,8 +65,8 @@ struct Analyzer {
 }
 
 impl Analyzer {
-    fn new(config: &Config) -> Analyzer {
-        let dotnet = if config.auto_discovery_enabled(&Language::Dotnet) {
+    fn new(opts: &Opts) -> Analyzer {
+        let dotnet = if opts.config.auto_discovery_enabled(&Language::Dotnet) {
             DotnetAnalyzer::new()
                 .map_err(|err| {
                     log::warn!("failed to initialize dependency analyzer for .NET: {err}");
@@ -77,19 +77,19 @@ impl Analyzer {
             None
         };
 
-        let go = if config.auto_discovery_enabled(&Language::Golang) {
+        let go = if opts.config.auto_discovery_enabled(&Language::Golang) {
             Some(GoAnalyzer {})
         } else {
             None
         };
 
-        let flutter = if config.auto_discovery_enabled(&Language::Flutter) {
-            Some(FlutterAnalyzer {})
+        let flutter = if opts.config.auto_discovery_enabled(&Language::Flutter) {
+            Some(FlutterAnalyzer::new(&opts.target))
         } else {
             None
         };
 
-        let kustomization = if config.auto_discovery_enabled(&Language::Kustomize) {
+        let kustomization = if opts.config.auto_discovery_enabled(&Language::Kustomize) {
             Some(KustomizeAnalyzer {})
         } else {
             None
@@ -201,7 +201,7 @@ impl Service {
     }
 
     pub fn try_determine(path: &str, opts: &Opts) -> Result<Service> {
-        let analyzer = Analyzer::new(&opts.config);
+        let analyzer = Analyzer::new(opts);
         let root_dir = &opts.target.canonicalized;
 
         let filename_candidates = vec![
@@ -277,7 +277,7 @@ impl Service {
     }
 
     pub fn discover(opts: &Opts) -> Result<Vec<Service>> {
-        let analyzer = Analyzer::new(&opts.config);
+        let analyzer = Analyzer::new(opts);
         let root_dir = &opts.target.canonicalized;
         let mut all = Vec::new();
 

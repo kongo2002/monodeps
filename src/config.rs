@@ -66,7 +66,7 @@ impl Config {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DepPattern {
     raw: PathInfo,
     pattern: Option<Regex>,
