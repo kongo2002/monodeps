@@ -34,10 +34,10 @@ jobs:
           - { id: arm-unknown-linux-musleabihf, target: arm-unknown-linux-musleabihf, os: ubuntu-24.04, use-cross: true }
           - { id: i686-unknown-linux-gnu      , target: i686-unknown-linux-gnu      , os: ubuntu-24.04, use-cross: true }
           - { id: i686-unknown-linux-musl     , target: i686-unknown-linux-musl     , os: ubuntu-24.04, use-cross: true }
-          # the macos-13 image is amd64 based
-          - { id: x86_64-apple-darwin         , target: x86_64-apple-darwin         , os: macos-13                      }
-          # the macos-14 image is arm64 based
-          - { id: aarch64-apple-darwin        , target: aarch64-apple-darwin        , os: macos-14                      }
+          # the macos-15 image is arm64 based
+          - { id: aarch64-apple-darwin        , target: aarch64-apple-darwin        , os: macos-15                      }
+          # the macos-15-intel image is x86-64 based (apparently the last supported one on github)
+          - { id: x86_64-apple-darwin         , target: x86_64-apple-darwin         , os: macos-15-intel                }
           - { id: x86_64-unknown-linux-gnu    , target: x86_64-unknown-linux-gnu    , os: ubuntu-24.04, use-cross: true }
           - { id: x86_64-unknown-linux-musl   , target: x86_64-unknown-linux-musl   , os: ubuntu-24.04, use-cross: true }
     env:
