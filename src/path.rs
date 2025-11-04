@@ -5,16 +5,17 @@ use path_clean::PathClean;
 
 #[derive(Debug, Clone)]
 pub struct PathInfo {
-    pub path: String,
+    pub display_path: String,
     pub canonicalized: String,
 }
 
 impl PathInfo {
-    pub fn new<P>(path: &str, root_dir: P) -> Result<Self>
+    pub fn new<P, R>(path: P, root_dir: R) -> Result<Self>
     where
         P: AsRef<Path>,
+        R: AsRef<Path>,
     {
-        let base = Path::new(root_dir.as_ref()).join(path);
+        let base = Path::new(root_dir.as_ref()).join(&path);
         let canonicalized = canonicalize(&base).or_else(|_| {
             base.to_str().map(|x| x.to_string()).ok_or(anyhow!(
                 "cannot convert dependency pattern: '{}'",
@@ -22,8 +23,10 @@ impl PathInfo {
             ))
         })?;
 
+        let display_path = path.as_ref().to_string_lossy().into_owned();
+
         Ok(Self {
-            path: path.to_string(),
+            display_path,
             canonicalized,
         })
     }
@@ -67,7 +70,7 @@ mod tests {
         let info = PathInfo::new("src/cli.rs", ".");
 
         assert_eq!(info.is_ok(), true);
-        assert_eq!(info.unwrap().path, "src/cli.rs");
+        assert_eq!(info.unwrap().display_path, "src/cli.rs");
     }
 
     #[test]

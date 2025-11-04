@@ -62,6 +62,7 @@ impl Config {
             Language::Dotnet => true,
             Language::Flutter => true,
             Language::Kustomize => true,
+            Language::JavaScript => true,
         }
     }
 }
@@ -73,15 +74,21 @@ pub struct DepPattern {
 }
 
 impl DepPattern {
-    pub fn new<P>(dependency: &str, root_dir: P) -> Result<Self>
+    pub fn new<P, R>(dependency: P, root_dir: R) -> Result<Self>
     where
         P: AsRef<Path>,
+        R: AsRef<Path>,
     {
-        let pattern = if dependency.contains(['?', '*']) {
-            Some(to_glob_regex(dependency)?)
+        let pattern = if let Some(str_path) = dependency.as_ref().to_str() {
+            if str_path.contains(['*', '?']) {
+                Some(to_glob_regex(str_path)?)
+            } else {
+                None
+            }
         } else {
             None
         };
+
         let raw = PathInfo::new(dependency, root_dir)?;
 
         Ok(Self { raw, pattern })
@@ -135,6 +142,7 @@ pub enum Language {
     Dotnet,
     Flutter,
     Kustomize,
+    JavaScript,
 }
 
 impl Display for Language {
@@ -144,6 +152,7 @@ impl Display for Language {
             Language::Dotnet => f.write_str("C#"),
             Language::Flutter => f.write_str("flutter"),
             Language::Kustomize => f.write_str("kustomize"),
+            Language::JavaScript => f.write_str("js"),
         }
     }
 }
@@ -160,6 +169,8 @@ impl TryFrom<&str> for Language {
             "dart" => Ok(Language::Flutter),
             "flutter" => Ok(Language::Flutter),
             "kustomize" => Ok(Language::Kustomize),
+            "js" => Ok(Language::JavaScript),
+            "javascript" => Ok(Language::JavaScript),
             unknown => Err(format!("unknown language: {}", unknown)),
         }
     }

@@ -14,11 +14,13 @@ use walkdir::{DirEntry, WalkDir};
 use self::dotnet::DotnetAnalyzer;
 use self::flutter::FlutterAnalyzer;
 use self::go::GoAnalyzer;
+use self::javascript::JavaScriptAnalyzer;
 use self::kustomize::KustomizeAnalyzer;
 
 mod dotnet;
 mod flutter;
 mod go;
+mod javascript;
 mod kustomize;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -62,6 +64,7 @@ struct Analyzer {
     go: Option<GoAnalyzer>,
     flutter: Option<FlutterAnalyzer>,
     kustomization: Option<KustomizeAnalyzer>,
+    javascript: Option<JavaScriptAnalyzer>,
 }
 
 impl Analyzer {
@@ -95,11 +98,18 @@ impl Analyzer {
             None
         };
 
+        let javascript = if opts.config.auto_discovery_enabled(&Language::JavaScript) {
+            Some(JavaScriptAnalyzer::new(opts.target.clone()))
+        } else {
+            None
+        };
+
         Self {
             dotnet,
             go,
             flutter,
             kustomization,
+            javascript,
         }
     }
 
@@ -125,6 +135,11 @@ impl Analyzer {
                 .unwrap_or_else(|| Ok(Vec::new())),
             Language::Kustomize => self
                 .kustomization
+                .as_ref()
+                .map(|analyzer| analyzer.dependencies(&dir))
+                .unwrap_or_else(|| Ok(Vec::new())),
+            Language::JavaScript => self
+                .javascript
                 .as_ref()
                 .map(|analyzer| analyzer.dependencies(&dir))
                 .unwrap_or_else(|| Ok(Vec::new())),
@@ -316,10 +331,7 @@ fn auto_discover_languages(depsfile: Depsfile, path: &PathInfo) -> Depsfile {
         }
     }
 
-    let mut freq_list = filetype_frequencies.into_iter().collect::<Vec<_>>();
-    freq_list.sort_by_key(|entry| -entry.1);
-
-    let languages = freq_list
+    let languages = filetype_frequencies
         .into_iter()
         .filter(|(_, score)| *score >= 3)
         .map(|tpl| tpl.0)
@@ -364,6 +376,12 @@ fn try_determine_language(entry: &DirEntry) -> Option<LanguageMatch> {
                 score: 1,
             });
         }
+        "js" | "jsx" | "tsx" | "ts" => {
+            return Some(LanguageMatch {
+                language: Language::JavaScript,
+                score: 1,
+            });
+        }
         _ => {}
     }
 
@@ -378,6 +396,10 @@ fn try_determine_language(entry: &DirEntry) -> Option<LanguageMatch> {
         }),
         "kustomization.yaml" | "kustomization.yml" => Some(LanguageMatch {
             language: Language::Kustomize,
+            score: 5,
+        }),
+        "package.json" => Some(LanguageMatch {
+            language: Language::JavaScript,
             score: 5,
         }),
         _ => None,
@@ -401,13 +423,9 @@ where
         .filter_map(|e| e.ok())
 }
 
-fn parent_dir(filename: &Path) -> Option<String> {
+fn parent_dir(filename: &Path) -> Option<PathBuf> {
     let path = PathBuf::from(filename);
-    path.ancestors()
-        .nth(1)
-        .and_then(|p| p.to_str())
-        .map(|p| p.to_string())
-        .filter(|p| !p.is_empty())
+    path.ancestors().nth(1).map(|x| x.to_owned())
 }
 
 fn map_depsfile(filename: &str, opts: &Opts) -> Option<DepsfileType> {
@@ -432,11 +450,10 @@ impl ServiceContext<'_> {
             return None;
         }
 
-        let depsfile_location = path
-            .to_str()
+        let depsfile_location = PathInfo::new(&path, root_dir).ok()?;
+        let service_location = path
+            .parent()
             .and_then(|p| PathInfo::new(p, root_dir).ok())?;
-
-        let service_location = path.parent().and_then(|p| to_pathinfo(p, root_dir))?;
 
         Some(ServiceContext {
             filetype,
@@ -445,12 +462,6 @@ impl ServiceContext<'_> {
             root_dir,
         })
     }
-}
-
-fn to_pathinfo(p: &Path, root_dir: &str) -> Option<PathInfo> {
-    let path = p.to_str()?;
-
-    PathInfo::new(path, root_dir).ok()
 }
 
 fn read_lines<P>(filename: P) -> Result<Lines<BufReader<File>>>
@@ -490,7 +501,7 @@ mod tests {
     fn get_service(services: Vec<Service>, name: &str) -> Option<Service> {
         services
             .into_iter()
-            .find(|svc| svc.path.path.ends_with(name))
+            .find(|svc| svc.path.display_path.ends_with(name))
     }
 
     fn mk_opts(target: &str) -> Result<Opts> {

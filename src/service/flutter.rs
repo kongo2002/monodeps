@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use yaml_rust::Yaml;
 
 use crate::config::DepPattern;
@@ -78,7 +78,7 @@ impl FlutterAnalyzer {
     }
 }
 
-fn find_local_dependencies(dependencies: &Yaml, pubspec_dir: &str) -> Option<Vec<DepPattern>> {
+fn find_local_dependencies(dependencies: &Yaml, pubspec_dir: &PathBuf) -> Option<Vec<DepPattern>> {
     let mut collected = Vec::new();
     let vs = dependencies.as_hash()?;
 

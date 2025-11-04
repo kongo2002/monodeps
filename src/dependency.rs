@@ -55,7 +55,7 @@ pub fn resolve(
         } else {
             log::warn!(
                 "{}: cannot find associated service - ignoring",
-                changed_file.path
+                changed_file.display_path
             );
         }
     }
@@ -103,7 +103,10 @@ where
             service_has_dependency(service, changed_files)
         {
             changed.push(service.path.clone());
-            service.trigger(trigger(file_dependency.path.clone(), auto_dependency));
+            service.trigger(trigger(
+                file_dependency.display_path.clone(),
+                auto_dependency,
+            ));
         }
     }
 
