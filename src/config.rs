@@ -63,6 +63,7 @@ impl Config {
             Language::Flutter => true,
             Language::Kustomize => true,
             Language::JavaScript => true,
+            Language::Protobuf => true,
         }
     }
 }
@@ -143,6 +144,7 @@ pub enum Language {
     Flutter,
     Kustomize,
     JavaScript,
+    Protobuf,
 }
 
 impl Display for Language {
@@ -153,6 +155,7 @@ impl Display for Language {
             Language::Flutter => f.write_str("flutter"),
             Language::Kustomize => f.write_str("kustomize"),
             Language::JavaScript => f.write_str("js"),
+            Language::Protobuf => f.write_str("proto"),
         }
     }
 }

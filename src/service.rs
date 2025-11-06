@@ -16,12 +16,14 @@ use self::flutter::FlutterAnalyzer;
 use self::go::GoAnalyzer;
 use self::javascript::JavaScriptAnalyzer;
 use self::kustomize::KustomizeAnalyzer;
+use self::proto::ProtoAnalyzer;
 
 mod dotnet;
 mod flutter;
 mod go;
 mod javascript;
 mod kustomize;
+mod proto;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum BuildTrigger {
@@ -65,6 +67,7 @@ struct Analyzer {
     flutter: Option<FlutterAnalyzer>,
     kustomization: Option<KustomizeAnalyzer>,
     javascript: Option<JavaScriptAnalyzer>,
+    protobuf: Option<ProtoAnalyzer>,
 }
 
 impl Analyzer {
@@ -104,12 +107,19 @@ impl Analyzer {
             None
         };
 
+        let protobuf = if opts.config.auto_discovery_enabled(&Language::Protobuf) {
+            Some(ProtoAnalyzer::new(opts.target.clone()))
+        } else {
+            None
+        };
+
         Self {
             dotnet,
             go,
             flutter,
             kustomization,
             javascript,
+            protobuf,
         }
     }
 
@@ -140,6 +150,11 @@ impl Analyzer {
                 .unwrap_or_else(|| Ok(Vec::new())),
             Language::JavaScript => self
                 .javascript
+                .as_ref()
+                .map(|analyzer| analyzer.dependencies(&dir))
+                .unwrap_or_else(|| Ok(Vec::new())),
+            Language::Protobuf => self
+                .protobuf
                 .as_ref()
                 .map(|analyzer| analyzer.dependencies(&dir))
                 .unwrap_or_else(|| Ok(Vec::new())),
@@ -376,6 +391,12 @@ fn try_determine_language(entry: &DirEntry) -> Option<LanguageMatch> {
                 score: 1,
             });
         }
+        "proto" => {
+            return Some(LanguageMatch {
+                language: Language::Protobuf,
+                score: 3,
+            });
+        }
         "js" | "jsx" | "tsx" | "ts" => {
             return Some(LanguageMatch {
                 language: Language::JavaScript,
@@ -430,8 +451,10 @@ fn parent_dir(filename: &Path) -> Option<PathBuf> {
 
 fn map_depsfile(filename: &str, opts: &Opts) -> Option<DepsfileType> {
     match filename {
-        "Buildfile.yaml" => Some(DepsfileType::Buildfile),
         "Depsfile" => Some(DepsfileType::Depsfile),
+        "Buildfile.yaml" => {
+            Some(DepsfileType::Buildfile).filter(|x| opts.supported_roots.contains(x))
+        }
         "justfile" => Some(DepsfileType::Justfile).filter(|x| opts.supported_roots.contains(x)),
         "Makefile" => Some(DepsfileType::Makefile).filter(|x| opts.supported_roots.contains(x)),
         _ => None,

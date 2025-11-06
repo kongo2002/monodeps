@@ -36,6 +36,7 @@ impl Opts {
         opts.optopt("o", "output", "output format", "FORMAT");
         opts.optflag("", "makefile", "accept 'Makefile' as project roots");
         opts.optflag("", "justfile", "accept 'justfile' as project roots");
+        opts.optflag("", "buildfile", "accept 'Buildfile.yaml' as project roots");
         opts.optflag("v", "verbose", "verbose output");
         opts.optflag("h", "help", "show help");
 
@@ -90,6 +91,10 @@ impl Opts {
 
         if matches.opt_present("justfile") {
             supported_roots.push(DepsfileType::Justfile);
+        }
+
+        if matches.opt_present("buildfile") {
+            supported_roots.push(DepsfileType::Buildfile);
         }
 
         Ok((
