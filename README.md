@@ -40,6 +40,8 @@ As of now, the following languages/frameworks are supported:
 - Flutter/Dart
 - C\# (.NET)
 - Kustomize
+- Protobuf
+- Javascript
 
 By default, *monodeps* will try to auto-detect the mentioned language/frameworks
 based on the present files and file types. Once detected, the language specific
@@ -93,7 +95,8 @@ dependencies:
 # monodeps will try to guess the language based on the majority of files in the
 # service directory.
 #
-# Currently supported: go/golang, csharp/dotnet, dart/flutter, kustomize
+# Currently supported: go/golang, csharp/dotnet, dart/flutter, kustomize,
+#                      js/javascript, proto
 languages:
   - go
 ```
