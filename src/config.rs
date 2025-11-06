@@ -154,7 +154,7 @@ impl Display for Language {
             Language::Dotnet => f.write_str("C#"),
             Language::Flutter => f.write_str("flutter"),
             Language::Kustomize => f.write_str("kustomize"),
-            Language::JavaScript => f.write_str("js"),
+            Language::JavaScript => f.write_str("javascript"),
             Language::Protobuf => f.write_str("proto"),
         }
     }
@@ -174,6 +174,7 @@ impl TryFrom<&str> for Language {
             "kustomize" => Ok(Language::Kustomize),
             "js" => Ok(Language::JavaScript),
             "javascript" => Ok(Language::JavaScript),
+            "proto" => Ok(Language::Protobuf),
             unknown => Err(format!("unknown language: {}", unknown)),
         }
     }
