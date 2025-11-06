@@ -68,7 +68,7 @@ ready-to-run binary.
 
 
 ## Configuration
-c
+
 In terms of configuration there are two components: a global, optional
 configuration file on a per-repository base and a `Depsfile` for each service
 that is built and deployed in CI/CD.
