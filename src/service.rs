@@ -510,7 +510,8 @@ mod tests {
 
     fn expect_output(services: Vec<Service>, expected_services: Vec<&str>) -> Result<()> {
         let mut cursor = Cursor::new(Vec::new());
-        print_services(&mut cursor, services, true);
+        let opts = mk_opts("./tests/examples/full")?;
+        print_services(&mut cursor, services, &opts);
 
         let output = String::from_utf8(cursor.into_inner())?;
 
@@ -543,6 +544,7 @@ mod tests {
             },
             output: crate::cli::OutputFormat::Plain,
             verbose: true,
+            relative: false,
             supported_roots: vec![],
         };
 

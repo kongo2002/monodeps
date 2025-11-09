@@ -58,7 +58,7 @@ fn dependencies(opts: Opts) {
     match service::Service::discover(&opts)
         .and_then(|services| dependency::resolve(services, changed_files, &opts))
     {
-        Ok(svs) => output(svs, opts.output, opts.verbose),
+        Ok(svs) => output(svs, &opts),
         Err(err) => {
             eprintln!("failed to resolve dependencies: {err}");
             std::process::exit(1)
@@ -66,15 +66,15 @@ fn dependencies(opts: Opts) {
     }
 }
 
-fn output(services: Vec<Service>, output: OutputFormat, verbose: bool) {
-    match output {
+fn output(services: Vec<Service>, opts: &Opts) {
+    match opts.output {
         OutputFormat::Plain => {
-            print_services(std::io::stdout(), services, verbose);
+            print_services(std::io::stdout(), services, opts);
         }
         OutputFormat::Json => {
             let to_output = services
                 .into_iter()
-                .map(|svc| svc.path.canonicalized)
+                .map(|svc| service_loc(&svc, opts))
                 .collect::<Vec<_>>();
             _ = serde_json::to_writer(std::io::stdout(), &to_output);
         }
@@ -85,7 +85,7 @@ fn output(services: Vec<Service>, output: OutputFormat, verbose: bool) {
 
                 let to_output = services
                     .into_iter()
-                    .map(|svc| Yaml::String(svc.path.canonicalized))
+                    .map(|svc| Yaml::String(service_loc(&svc, opts)))
                     .collect::<Vec<_>>();
 
                 let array = Yaml::Array(to_output);
@@ -100,17 +100,25 @@ fn output(services: Vec<Service>, output: OutputFormat, verbose: bool) {
     }
 }
 
-fn print_services<W>(mut w: W, services: Vec<Service>, verbose: bool)
+fn service_loc(service: &Service, opts: &Opts) -> String {
+    if opts.relative {
+        service.path.relative_to(&opts.target)
+    } else {
+        service.path.canonicalized.clone()
+    }
+}
+
+fn print_services<W>(mut w: W, services: Vec<Service>, opts: &Opts)
 where
     W: std::io::Write,
 {
     for svc in services {
-        if !verbose {
-            _ = w.write_fmt(format_args!("{}\n", svc.path.canonicalized));
+        if !opts.verbose {
+            _ = w.write_fmt(format_args!("{}\n", service_loc(&svc, opts)));
         } else {
             _ = w.write_fmt(format_args!(
                 "{} [{}]\n",
-                svc.path.canonicalized,
+                service_loc(&svc, opts),
                 svc.triggers
                     .into_iter()
                     .map(|t| format!("{}", t))

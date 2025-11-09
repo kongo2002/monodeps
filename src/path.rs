@@ -30,6 +30,15 @@ impl PathInfo {
             canonicalized,
         })
     }
+
+    pub fn relative_to(&self, origin: &PathInfo) -> String {
+        let canonicalized = Path::new(&self.canonicalized);
+
+        canonicalized
+            .strip_prefix(&origin.canonicalized)
+            .map(|stripped| format!("./{}", stripped.display()))
+            .unwrap_or_else(|_| self.canonicalized.clone())
+    }
 }
 
 pub fn canonicalize(path: &Path) -> Result<String> {
