@@ -7,6 +7,7 @@ use crate::path::PathInfo;
 pub enum OutputFormat {
     Plain,
     Json,
+    Yaml,
 }
 
 #[derive(Debug, PartialEq)]
@@ -33,7 +34,7 @@ impl Opts {
         let mut opts = Options::new();
         opts.optopt("t", "target", "target directory to operate on", "DIR");
         opts.optopt("c", "config", "configuration file", "FILE");
-        opts.optopt("o", "output", "output format", "FORMAT");
+        opts.optopt("o", "output", "output format [plain, yaml, json]", "FORMAT");
         opts.optflag("", "makefile", "accept 'Makefile' as project roots");
         opts.optflag("", "justfile", "accept 'justfile' as project roots");
         opts.optflag("", "buildfile", "accept 'Buildfile.yaml' as project roots");
@@ -114,7 +115,10 @@ fn parse_format(input: String) -> Result<OutputFormat> {
     match input.as_str() {
         "json" => Ok(OutputFormat::Json),
         "plain" => Ok(OutputFormat::Plain),
-        _ => Err(anyhow!("invalid output format (supported: plain, json)")),
+        "yaml" => Ok(OutputFormat::Yaml),
+        _ => Err(anyhow!(
+            "invalid output format (supported: plain, json, yaml)"
+        )),
     }
 }
 

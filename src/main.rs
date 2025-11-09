@@ -3,6 +3,7 @@ use self::service::Service;
 
 use anyhow::Result;
 use env_logger::Env;
+use yaml_rust::{Yaml, YamlEmitter};
 
 mod cli;
 mod config;
@@ -76,6 +77,25 @@ fn output(services: Vec<Service>, output: OutputFormat, verbose: bool) {
                 .map(|svc| svc.path.canonicalized)
                 .collect::<Vec<_>>();
             _ = serde_json::to_writer(std::io::stdout(), &to_output);
+        }
+        OutputFormat::Yaml => {
+            let mut output = String::new();
+            {
+                let mut emitter = YamlEmitter::new(&mut output);
+
+                let to_output = services
+                    .into_iter()
+                    .map(|svc| Yaml::String(svc.path.canonicalized))
+                    .collect::<Vec<_>>();
+
+                let array = Yaml::Array(to_output);
+                _ = emitter.dump(&array);
+            }
+
+            // we want to omit the `---` on the first line
+            for line in output.lines().skip(1) {
+                println!("{}", line);
+            }
         }
     }
 }
