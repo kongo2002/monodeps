@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use self::cli::{Operation, Opts, OutputFormat};
 use self::service::Service;
 
@@ -73,8 +75,8 @@ fn output(services: Vec<Service>, opts: &Opts) {
         }
         OutputFormat::Json => {
             let to_output = services
-                .into_iter()
-                .map(|svc| service_loc(&svc, opts))
+                .iter()
+                .map(|svc| service_loc(svc, opts))
                 .collect::<Vec<_>>();
             _ = serde_json::to_writer(std::io::stdout(), &to_output);
         }
@@ -84,8 +86,8 @@ fn output(services: Vec<Service>, opts: &Opts) {
                 let mut emitter = YamlEmitter::new(&mut output);
 
                 let to_output = services
-                    .into_iter()
-                    .map(|svc| Yaml::String(service_loc(&svc, opts)))
+                    .iter()
+                    .map(|svc| Yaml::String(service_loc(svc, opts).to_string()))
                     .collect::<Vec<_>>();
 
                 let array = Yaml::Array(to_output);
@@ -100,11 +102,11 @@ fn output(services: Vec<Service>, opts: &Opts) {
     }
 }
 
-fn service_loc(service: &Service, opts: &Opts) -> String {
+fn service_loc<'a>(service: &'a Service, opts: &Opts) -> Cow<'a, str> {
     if opts.relative {
-        service.path.relative_to(&opts.target)
+        Cow::from(service.path.relative_to(&opts.target))
     } else {
-        service.path.canonicalized.clone()
+        Cow::from(&service.path.canonicalized)
     }
 }
 
@@ -120,7 +122,7 @@ where
                 "{} [{}]\n",
                 service_loc(&svc, opts),
                 svc.triggers
-                    .into_iter()
+                    .iter()
                     .map(|t| format!("{}", t))
                     .collect::<Vec<_>>()
                     .join(", ")
