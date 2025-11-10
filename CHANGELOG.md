@@ -1,6 +1,16 @@
 # Changelog
 
 
+## 1.2.0
+
+2025-11-10
+
+- feature: add basic protobuf support
+- feature: add basic node support
+- improvement: add YAML output (`-o yaml`)
+- improvement: add relative path output (`--relative`)
+
+
 ## 1.1.0
 
 2025-11-02
