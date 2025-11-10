@@ -179,7 +179,7 @@ pub struct Service {
     pub path: PathInfo,
     pub depsfile: Depsfile,
     pub auto_dependencies: Vec<AutoDependency>,
-    pub triggers: Option<BuildTrigger>,
+    pub trigger: Option<BuildTrigger>,
 }
 
 #[derive(Debug)]
@@ -221,11 +221,11 @@ impl Display for AutoDependency {
 
 impl Service {
     pub fn has_trigger(&self) -> bool {
-        self.triggers.is_some()
+        self.trigger.is_some()
     }
 
     pub fn trigger(&mut self, trigger: BuildTrigger) {
-        self.triggers.replace(trigger);
+        self.trigger.replace(trigger);
     }
 
     pub fn try_determine(path: &str, opts: &Opts) -> Result<Service> {
@@ -299,7 +299,7 @@ impl Service {
             path: ctx.service_location,
             depsfile,
             auto_dependencies,
-            triggers: None,
+            trigger: None,
         })
     }
 

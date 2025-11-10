@@ -121,11 +121,10 @@ where
             _ = w.write_fmt(format_args!(
                 "{} [{}]\n",
                 service_loc(&svc, opts),
-                svc.triggers
-                    .iter()
-                    .map(|t| format!("{}", t))
-                    .collect::<Vec<_>>()
-                    .join(", ")
+                svc.trigger
+                    .as_ref()
+                    .map(|t| t.to_string())
+                    .unwrap_or_default()
             ));
         }
     }
