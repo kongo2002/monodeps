@@ -1,6 +1,13 @@
 # Changelog
 
 
+## 1.2.1
+
+2025-11-11
+
+- improvement: handle multiple service root files in the same directory
+
+
 ## 1.2.0
 
 2025-11-10
