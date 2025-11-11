@@ -457,15 +457,15 @@ fn parent_dir(filename: &Path) -> Option<PathBuf> {
 }
 
 fn map_depsfile(filename: &str, opts: &Opts) -> Option<DepsfileType> {
-    match filename {
+    let filetype = match filename {
         "Depsfile" => Some(DepsfileType::Depsfile),
-        "Buildfile.yaml" => {
-            Some(DepsfileType::Buildfile).filter(|x| opts.supported_roots.contains(x))
-        }
-        "justfile" => Some(DepsfileType::Justfile).filter(|x| opts.supported_roots.contains(x)),
-        "Makefile" => Some(DepsfileType::Makefile).filter(|x| opts.supported_roots.contains(x)),
+        "Buildfile.yaml" => Some(DepsfileType::Buildfile),
+        "justfile" => Some(DepsfileType::Justfile),
+        "Makefile" => Some(DepsfileType::Makefile),
         _ => None,
-    }
+    };
+
+    filetype.filter(|ft| opts.is_supported(ft))
 }
 
 impl ServiceContext<'_> {
