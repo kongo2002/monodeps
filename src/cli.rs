@@ -31,6 +31,10 @@ impl Opts {
         Opts::parse_args(args)
     }
 
+    pub fn is_supported(&self, filetype: &DepsfileType) -> bool {
+        *filetype == DepsfileType::Depsfile || self.supported_roots.contains(filetype)
+    }
+
     fn parse_args(args: Vec<String>) -> Result<(Operation, Self)> {
         let mut opts = Options::new();
         opts.optopt("t", "target", "target directory to operate on", "DIR");

@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::fs::File;
@@ -306,8 +307,9 @@ impl Service {
     pub fn discover(opts: &Opts) -> Result<Vec<Service>> {
         let analyzer = Analyzer::new(opts);
         let root_dir = &opts.target.canonicalized;
-        let mut all = Vec::new();
+        let mut contexts = HashMap::new();
 
+        // first we collect all "distinct" service contexts
         for entry in non_hidden_files(root_dir) {
             if let Some(ctx) = ServiceContext::from_depsfile(entry.into_path(), root_dir, opts) {
                 // when the dependency file is directly in the project root there is no real
@@ -316,12 +318,20 @@ impl Service {
                     continue;
                 }
 
-                let service = Service::discover_service(&analyzer, ctx, opts)?;
-
-                all.push(service);
+                match contexts.entry(ctx.service_location.canonicalized.clone()) {
+                    Entry::Vacant(free) => {
+                        free.insert(ctx);
+                    }
+                    Entry::Occupied(exists) => exists.into_mut().merge(ctx, opts),
+                };
             }
         }
-        Ok(all)
+
+        // afterwards we are resolving all service contexts into actual services
+        contexts
+            .into_values()
+            .map(|ctx| Service::discover_service(&analyzer, ctx, opts))
+            .collect()
     }
 }
 
@@ -482,6 +492,21 @@ impl ServiceContext<'_> {
             root_dir,
         })
     }
+
+    /// Merge will combine the information from two ServiceContexts
+    /// and keep the most "important" values, depending on their
+    /// precedence, mostly `Depsfile` being the most preferred.
+    fn merge(&mut self, other: ServiceContext, opts: &Opts) {
+        if self.filetype == DepsfileType::Depsfile || !opts.is_supported(&other.filetype) {
+            return;
+        }
+
+        if !opts.is_supported(&self.filetype) || self.filetype > other.filetype {
+            self.depsfile_location = other.depsfile_location;
+            self.service_location = other.service_location;
+            self.filetype = other.filetype;
+        }
+    }
 }
 
 fn read_lines<P>(filename: P) -> Result<Lines<BufReader<File>>>
@@ -501,6 +526,7 @@ mod tests {
     use crate::cli::Opts;
     use crate::config::{AutoDiscoveryConfig, Config, DepsfileType, DotnetConfig, GoDepsConfig};
     use crate::path::PathInfo;
+    use crate::service::ServiceContext;
     use crate::{dependency, print_services};
 
     use super::Service;
@@ -562,8 +588,33 @@ mod tests {
         let opts = mk_opts("./tests/examples/full")?;
         let services = Service::discover(&opts)?;
 
-        // just 1 Depsfile
-        assert_eq!(1, services.len());
+        // just 2 Depsfile
+        assert_eq!(2, services.len());
+        Ok(())
+    }
+
+    #[test]
+    fn discover_services_duplicate_files() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let justfile_opts = Opts {
+            supported_roots: vec![DepsfileType::Justfile],
+            ..opts
+        };
+        let services = Service::discover(&justfile_opts)?;
+
+        // 2 Depsfile + 4 justfiles
+        //
+        // technically we have 2 Depsfiles and 5! justfiles,
+        // however we want the Depsfile in service-e to take precedence
+        assert_eq!(6, services.len());
+
+        let service_e = get_service(services, "service-e");
+
+        assert!(service_e.is_some(), "service-e was not discovered");
+
+        // - service-f
+        assert_eq!(1, service_e.unwrap().depsfile.dependencies.len());
+
         Ok(())
     }
 
@@ -576,8 +627,8 @@ mod tests {
         };
         let services = Service::discover(&justfile_opts)?;
 
-        // 1 Depsfile + 3 justfiles
-        assert_eq!(4, services.len());
+        // 2 Depsfile + 4 justfiles
+        assert_eq!(6, services.len());
 
         let service_a = get_service(services, "service-a");
 
@@ -599,8 +650,8 @@ mod tests {
         };
         let services = Service::discover(&makefile_opts)?;
 
-        // 1 Depsfile + 1 Makefile
-        assert_eq!(2, services.len());
+        // 2 Depsfile + 1 Makefile
+        assert_eq!(3, services.len());
 
         Ok(())
     }
@@ -614,8 +665,8 @@ mod tests {
         };
         let services = Service::discover(&all_opts)?;
 
-        // 1 Depsfile + 1 Makefile + 3 justfile
-        assert_eq!(5, services.len());
+        // 2 Depsfile + 1 Makefile + 4 justfile
+        assert_eq!(7, services.len());
 
         let deps = dependency::resolve(services, vec!["shared/something".to_string()], &all_opts)?;
 
@@ -637,8 +688,8 @@ mod tests {
         };
         let services = Service::discover(&justfile_opts)?;
 
-        // 1 Depsfile + 3 justfile
-        assert_eq!(4, services.len());
+        // 2 Depsfile + 4 justfile
+        assert_eq!(6, services.len());
 
         let deps = dependency::resolve(
             services,
@@ -662,8 +713,8 @@ mod tests {
         };
         let services = Service::discover(&justfile_opts)?;
 
-        // 1 Depsfile + 3 justfile
-        assert_eq!(4, services.len());
+        // 2 Depsfile + 4 justfile
+        assert_eq!(6, services.len());
 
         let deps = dependency::resolve(
             services,
@@ -679,6 +730,43 @@ mod tests {
     }
 
     #[test]
+    fn merge_correct_filetype_order() {
+        assert_eq!(true, DepsfileType::Depsfile < DepsfileType::Buildfile);
+        assert_eq!(true, DepsfileType::Depsfile < DepsfileType::Justfile);
+        assert_eq!(true, DepsfileType::Depsfile < DepsfileType::Makefile);
+        assert_eq!(true, DepsfileType::Buildfile < DepsfileType::Justfile);
+    }
+
+    #[test]
+    fn merge_overwrites_justfile() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let all_opts = Opts {
+            supported_roots: vec![DepsfileType::Makefile, DepsfileType::Justfile],
+            ..opts
+        };
+
+        let mut justfile_ctx = ServiceContext {
+            filetype: DepsfileType::Justfile,
+            depsfile_location: PathInfo::new(".", ".")?,
+            service_location: PathInfo::new(".", ".")?,
+            root_dir: ".",
+        };
+
+        let depsfile_ctx = ServiceContext {
+            filetype: DepsfileType::Depsfile,
+            depsfile_location: PathInfo::new(".", ".")?,
+            service_location: PathInfo::new(".", ".")?,
+            root_dir: ".",
+        };
+
+        justfile_ctx.merge(depsfile_ctx, &all_opts);
+
+        assert_eq!(DepsfileType::Depsfile, justfile_ctx.filetype);
+
+        Ok(())
+    }
+
+    #[test]
     fn resolve_dependencies_one_service() -> Result<()> {
         let opts = mk_opts("./tests/examples/full")?;
         let all_opts = Opts {
@@ -687,8 +775,8 @@ mod tests {
         };
         let services = Service::discover(&all_opts)?;
 
-        // 1 Depsfile + 1 Makefile + 3 justfile
-        assert_eq!(5, services.len());
+        // 2 Depsfile + 1 Makefile + 4 justfile
+        assert_eq!(7, services.len());
 
         let deps = dependency::resolve(
             services,
@@ -719,8 +807,8 @@ mod tests {
         };
         let services = Service::discover(&all_opts)?;
 
-        // 1 Depsfile + 1 Makefile + 3 justfile
-        assert_eq!(5, services.len());
+        // 2 Depsfile + 1 Makefile + 4 justfile
+        assert_eq!(7, services.len());
 
         let deps = dependency::resolve(
             services,
@@ -732,11 +820,21 @@ mod tests {
         // - service-b
         // - service-c
         // - service-d
+        // - service-e
+        // - service-f
         // - shared
-        assert_eq!(5, deps.len());
+        assert_eq!(7, deps.len());
         expect_output(
             deps,
-            vec!["service-a", "service-b", "service-c", "service-d", "shared"],
+            vec![
+                "service-a",
+                "service-b",
+                "service-c",
+                "service-d",
+                "service-e",
+                "service-f",
+                "shared",
+            ],
         )?;
 
         Ok(())

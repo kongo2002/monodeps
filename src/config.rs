@@ -180,7 +180,7 @@ impl TryFrom<&str> for Language {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq, PartialOrd)]
 pub enum DepsfileType {
     Depsfile,
     Buildfile,
