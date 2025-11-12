@@ -40,6 +40,7 @@ As of now, the following languages/frameworks are supported:
 - Flutter/Dart
 - C\# (.NET)
 - Kustomize
+- Justfile
 - Protobuf
 - Javascript
 
@@ -96,7 +97,7 @@ dependencies:
 # service directory.
 #
 # Currently supported: go/golang, csharp/dotnet, dart/flutter, kustomize,
-#                      js/javascript, proto
+#                      js/javascript, proto, justfile
 languages:
   - go
 ```
