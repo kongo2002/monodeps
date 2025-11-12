@@ -16,6 +16,7 @@ use self::dotnet::DotnetAnalyzer;
 use self::flutter::FlutterAnalyzer;
 use self::go::GoAnalyzer;
 use self::javascript::JavaScriptAnalyzer;
+use self::justfile::JustfileAnalyzer;
 use self::kustomize::KustomizeAnalyzer;
 use self::proto::ProtoAnalyzer;
 
@@ -23,6 +24,7 @@ mod dotnet;
 mod flutter;
 mod go;
 mod javascript;
+mod justfile;
 mod kustomize;
 mod proto;
 
@@ -69,6 +71,7 @@ struct Analyzer {
     kustomization: Option<KustomizeAnalyzer>,
     javascript: Option<JavaScriptAnalyzer>,
     protobuf: Option<ProtoAnalyzer>,
+    justfile: Option<JustfileAnalyzer>,
 }
 
 impl Analyzer {
@@ -114,6 +117,12 @@ impl Analyzer {
             None
         };
 
+        let justfile = if opts.config.auto_discovery_enabled(&Language::Justfile) {
+            Some(JustfileAnalyzer {})
+        } else {
+            None
+        };
+
         Self {
             dotnet,
             go,
@@ -121,6 +130,7 @@ impl Analyzer {
             kustomization,
             javascript,
             protobuf,
+            justfile,
         }
     }
 
@@ -156,6 +166,11 @@ impl Analyzer {
                 .unwrap_or_else(|| Ok(Vec::new())),
             Language::Protobuf => self
                 .protobuf
+                .as_ref()
+                .map(|analyzer| analyzer.dependencies(&dir))
+                .unwrap_or_else(|| Ok(Vec::new())),
+            Language::Justfile => self
+                .justfile
                 .as_ref()
                 .map(|analyzer| analyzer.dependencies(&dir))
                 .unwrap_or_else(|| Ok(Vec::new())),
@@ -371,40 +386,46 @@ struct LanguageMatch {
 }
 
 fn try_determine_language(entry: &DirEntry) -> Option<LanguageMatch> {
-    let extension = entry.path().extension().and_then(|x| x.to_str())?;
+    let extension = entry.path().extension().and_then(|ext| ext.to_str());
 
     match extension {
-        "cs" => {
+        Some("cs") => {
             return Some(LanguageMatch {
                 language: Language::Dotnet,
                 score: 1,
             });
         }
-        "csproj" => {
+        Some("csproj") => {
             return Some(LanguageMatch {
                 language: Language::Dotnet,
                 score: 5,
             });
         }
-        "go" => {
+        Some("go") => {
             return Some(LanguageMatch {
                 language: Language::Golang,
                 score: 1,
             });
         }
-        "dart" => {
+        Some("dart") => {
             return Some(LanguageMatch {
                 language: Language::Flutter,
                 score: 1,
             });
         }
-        "proto" => {
+        Some("proto") => {
             return Some(LanguageMatch {
                 language: Language::Protobuf,
                 score: 3,
             });
         }
-        "js" | "jsx" | "tsx" | "ts" => {
+        Some("just") => {
+            return Some(LanguageMatch {
+                language: Language::Justfile,
+                score: 3,
+            });
+        }
+        Some("js" | "jsx" | "tsx" | "ts") => {
             return Some(LanguageMatch {
                 language: Language::JavaScript,
                 score: 1,
@@ -428,6 +449,10 @@ fn try_determine_language(entry: &DirEntry) -> Option<LanguageMatch> {
         }),
         "package.json" => Some(LanguageMatch {
             language: Language::JavaScript,
+            score: 5,
+        }),
+        "justfile" => Some(LanguageMatch {
+            language: Language::Justfile,
             score: 5,
         }),
         _ => None,

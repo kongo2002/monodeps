@@ -64,6 +64,7 @@ impl Config {
             Language::Kustomize => true,
             Language::JavaScript => true,
             Language::Protobuf => true,
+            Language::Justfile => true,
         }
     }
 }
@@ -145,6 +146,7 @@ pub enum Language {
     Kustomize,
     JavaScript,
     Protobuf,
+    Justfile,
 }
 
 impl Display for Language {
@@ -156,6 +158,7 @@ impl Display for Language {
             Language::Kustomize => f.write_str("kustomize"),
             Language::JavaScript => f.write_str("javascript"),
             Language::Protobuf => f.write_str("proto"),
+            Language::Justfile => f.write_str("justfile"),
         }
     }
 }

@@ -66,11 +66,7 @@ where
             break;
         }
 
-        if !line.starts_with("import") {
-            continue;
-        }
-
-        if let Some(import) = extract_from_import(&line, proto_candidates) {
+        if let Some(import) = extract_from_line(&line, proto_candidates) {
             imports.push(import);
         }
     }
@@ -78,7 +74,11 @@ where
     Ok(imports)
 }
 
-fn extract_from_import(line: &str, proto_candidates: &[PathInfo]) -> Option<DepPattern> {
+fn extract_from_line(line: &str, proto_candidates: &[PathInfo]) -> Option<DepPattern> {
+    if !line.starts_with("import") {
+        return None;
+    }
+
     let parts: Vec<_> = line.splitn(3, "\"").collect();
     if parts.len() != 3 {
         return None;

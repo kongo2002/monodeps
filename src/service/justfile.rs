@@ -1,0 +1,125 @@
+use std::path::Path;
+
+use anyhow::{Result, anyhow};
+use walkdir::DirEntry;
+
+use crate::config::DepPattern;
+use crate::service::non_hidden_files;
+
+use super::read_lines;
+
+const SCAN_MAX_LINES: usize = 200;
+
+pub(super) struct JustfileAnalyzer {}
+
+impl JustfileAnalyzer {
+    pub(super) fn dependencies<P>(&self, dir: P) -> Result<Vec<DepPattern>>
+    where
+        P: AsRef<Path>,
+    {
+        let mut dependencies = Vec::new();
+
+        for entry in non_hidden_files(dir) {
+            if !is_justfile(&entry) {
+                continue;
+            }
+
+            dependencies.extend(extract_imports(entry.path())?);
+        }
+
+        Ok(dependencies)
+    }
+}
+
+fn extract_imports<P>(path: P) -> Result<Vec<DepPattern>>
+where
+    P: AsRef<Path>,
+{
+    let mut scanned_lines = 0usize;
+    let mut imports = Vec::new();
+
+    let parent = path
+        .as_ref()
+        .parent()
+        .ok_or_else(|| anyhow!("cannot determine parent directory"))?;
+
+    let lines = read_lines(&path)?.map_while(Result::ok);
+
+    for line in lines {
+        scanned_lines += 1;
+        if scanned_lines > SCAN_MAX_LINES {
+            break;
+        }
+
+        if let Some(import) = extract_from_line(&line, parent) {
+            imports.push(import);
+        }
+    }
+
+    Ok(imports)
+}
+
+fn extract_from_line(line: &str, dir: &Path) -> Option<DepPattern> {
+    if !line.starts_with("import") {
+        return None;
+    }
+
+    let parts: Vec<_> = line.splitn(3, "'").collect();
+    if parts.len() != 3 {
+        return None;
+    }
+
+    // TODO: support transitive dependencies
+    DepPattern::new(parts[1], dir).ok()
+}
+
+fn is_justfile(entry: &DirEntry) -> bool {
+    let file_name = entry.file_name();
+
+    file_name.eq_ignore_ascii_case("justfile")
+        || file_name
+            .to_str()
+            .map(|name| name.ends_with(".just"))
+            .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use crate::service::justfile::extract_from_line;
+
+    fn extract(line: &str, dir: &Path) -> Option<String> {
+        let pattern = extract_from_line(line, dir)?;
+        let hash = pattern.hash()?;
+
+        Some(hash.to_string())
+    }
+
+    #[test]
+    fn no_match_invalid() {
+        let dir = Path::new("/tmp");
+        assert_eq!(None, extract("whatever this is", &dir));
+    }
+
+    #[test]
+    fn no_match_import_not_beginning() {
+        let dir = Path::new("/tmp");
+        assert_eq!(None, extract("whatever this import is", &dir));
+    }
+
+    #[test]
+    fn no_match_import_no_content() {
+        let dir = Path::new("/tmp");
+        assert_eq!(None, extract("import '", &dir));
+    }
+
+    #[test]
+    fn match_some_import() {
+        let dir = Path::new("/tmp/some/where");
+        assert_eq!(
+            Some("/tmp/some/usr/share/justfile".to_string()),
+            extract("import '../usr/share/justfile'", &dir)
+        );
+    }
+}
