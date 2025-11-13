@@ -3,20 +3,18 @@ use std::path::Path;
 use anyhow::{Result, anyhow};
 use walkdir::DirEntry;
 
+use crate::cli::Opts;
 use crate::config::DepPattern;
 use crate::service::non_hidden_files;
 
-use super::read_lines;
+use super::{LanguageAnalyzer, read_lines};
 
 const SCAN_MAX_LINES: usize = 200;
 
 pub(super) struct JustfileAnalyzer {}
 
-impl JustfileAnalyzer {
-    pub(super) fn dependencies<P>(&self, dir: P) -> Result<Vec<DepPattern>>
-    where
-        P: AsRef<Path>,
-    {
+impl LanguageAnalyzer for JustfileAnalyzer {
+    fn dependencies(&self, dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
         let mut dependencies = Vec::new();
 
         for entry in non_hidden_files(dir) {

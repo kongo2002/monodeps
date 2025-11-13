@@ -1,13 +1,14 @@
 use anyhow::Result;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use yaml_rust::Yaml;
 
+use crate::cli::Opts;
 use crate::config::DepPattern;
 use crate::path::PathInfo;
 use crate::service::parent_dir;
 use crate::utils::{load_yaml, yaml_str_list};
 
-use super::non_hidden_files;
+use super::{LanguageAnalyzer, non_hidden_files};
 
 struct Workspace {
     dependencies: Vec<DepPattern>,
@@ -23,11 +24,10 @@ impl FlutterAnalyzer {
 
         Self { workspace }
     }
+}
 
-    pub(super) fn dependencies<P>(&self, dir: P) -> Result<Vec<DepPattern>>
-    where
-        P: AsRef<Path>,
-    {
+impl LanguageAnalyzer for FlutterAnalyzer {
+    fn dependencies(&self, dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
         let mut dependencies = Vec::new();
 
         for entry in non_hidden_files(&dir) {

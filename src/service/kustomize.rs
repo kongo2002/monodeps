@@ -3,19 +3,17 @@ use std::path::Path;
 
 use anyhow::{Result, anyhow};
 
+use crate::cli::Opts;
 use crate::config::DepPattern;
 use crate::path::canonicalize;
 use crate::utils::{load_yaml, yaml_str_list};
 
-use super::non_hidden_files;
+use super::{LanguageAnalyzer, non_hidden_files};
 
 pub(super) struct KustomizeAnalyzer {}
 
-impl KustomizeAnalyzer {
-    pub(super) fn dependencies<P>(&self, dir: P) -> Result<Vec<DepPattern>>
-    where
-        P: AsRef<Path>,
-    {
+impl LanguageAnalyzer for KustomizeAnalyzer {
+    fn dependencies(&self, dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
         let mut collected_imports = Vec::new();
 
         for entry in non_hidden_files(&dir) {
@@ -31,7 +29,7 @@ impl KustomizeAnalyzer {
             }
 
             let mut visited_files = HashSet::new();
-            let deps = parse_kustomization(entry.path(), &dir, &mut visited_files)?;
+            let deps = parse_kustomization(entry.path(), dir, &mut visited_files)?;
 
             collected_imports.extend(deps);
         }
@@ -141,6 +139,9 @@ where
 
 #[cfg(test)]
 mod tests {
+    use crate::config::{AutoDiscoveryConfig, Config, DotnetConfig, GoDepsConfig};
+    use crate::path::PathInfo;
+
     use super::*;
     use std::fs::{self, File};
     use std::io::Write;
@@ -170,10 +171,34 @@ mod tests {
         uniques.len() + non_hashes
     }
 
+    fn mk_opts(target: &Path) -> Result<Opts> {
+        let opts = Opts {
+            target: PathInfo::new(target, "")?,
+            config: Config {
+                auto_discovery: AutoDiscoveryConfig {
+                    go: GoDepsConfig {
+                        package_prefixes: vec!["dev.azure.com/foo/bar".to_string()],
+                    },
+                    dotnet: DotnetConfig {
+                        package_namespaces: vec![],
+                    },
+                },
+                global_dependencies: vec![],
+            },
+            output: crate::cli::OutputFormat::Plain,
+            verbose: true,
+            relative: false,
+            supported_roots: vec![],
+        };
+
+        Ok(opts)
+    }
+
     #[test]
     fn test_simple_kustomization() -> Result<()> {
         let dir = tmp()?;
         let base_dir = dir.path();
+        let opts = mk_opts(base_dir)?;
 
         create_kustomization(
             base_dir,
@@ -188,7 +213,7 @@ resources:
         File::create(base_dir.join("resource2.yaml"))?;
 
         let analyzer = KustomizeAnalyzer {};
-        let deps = analyzer.dependencies(base_dir)?;
+        let deps = analyzer.dependencies(base_dir.to_str().unwrap(), &opts)?;
 
         // 2 resources + kustomization.yaml
         assert_eq!(distinct_deps(deps), 3);
@@ -200,6 +225,7 @@ resources:
     fn test_directory_dependencies() -> Result<()> {
         let dir = tmp()?;
         let base_dir = dir.path();
+        let opts = mk_opts(base_dir)?;
         let sub_dir = base_dir.join("sub");
         fs::create_dir(&sub_dir)?;
 
@@ -223,7 +249,7 @@ resources:
         File::create(sub_dir.join("sub_resource.yaml"))?;
 
         let analyzer = KustomizeAnalyzer {};
-        let deps = analyzer.dependencies(base_dir)?;
+        let deps = analyzer.dependencies(base_dir.to_str().unwrap(), &opts)?;
 
         // 1 resource + 2 kustomization.yaml
         assert_eq!(distinct_deps(deps), 3);
@@ -235,6 +261,7 @@ resources:
     fn test_bases_and_components() -> Result<()> {
         let dir = tmp()?;
         let base_dir = dir.path();
+        let opts = mk_opts(base_dir)?;
         let base_dep_dir = base_dir.join("base");
         let component_dep_dir = base_dir.join("component");
         fs::create_dir(&base_dep_dir)?;
@@ -273,7 +300,7 @@ resources:
         File::create(component_dep_dir.join("component_resource.yaml"))?;
 
         let analyzer = KustomizeAnalyzer {};
-        let deps = analyzer.dependencies(base_dir)?;
+        let deps = analyzer.dependencies(base_dir.to_str().unwrap(), &opts)?;
 
         // 3 resources + 2 kustomization.yaml
         assert_eq!(distinct_deps(deps), 5);
@@ -285,6 +312,7 @@ resources:
     fn test_patches_and_config_map_generator() -> Result<()> {
         let dir = tmp()?;
         let base_dir = dir.path();
+        let opts = mk_opts(base_dir)?;
 
         create_kustomization(
             base_dir,
@@ -305,7 +333,7 @@ configMapGenerator:
         File::create(base_dir.join("config.properties"))?;
 
         let analyzer = KustomizeAnalyzer {};
-        let deps = analyzer.dependencies(base_dir)?;
+        let deps = analyzer.dependencies(base_dir.to_str().unwrap(), &opts)?;
 
         // 3 resources + kustomization.yaml
         assert_eq!(distinct_deps(deps), 4);
@@ -317,6 +345,7 @@ configMapGenerator:
     fn test_cyclic_dependency() -> Result<()> {
         let dir = tmp()?;
         let base_dir = dir.path();
+        let opts = mk_opts(base_dir)?;
         let sub_dir = base_dir.join("sub");
         fs::create_dir(&sub_dir)?;
 
@@ -342,7 +371,7 @@ resources:
         )?;
 
         let analyzer = KustomizeAnalyzer {};
-        let result = analyzer.dependencies(base_dir);
+        let result = analyzer.dependencies(base_dir.to_str().unwrap(), &opts);
 
         assert!(result.is_err());
         assert!(
@@ -359,6 +388,7 @@ resources:
     fn test_missing_kustomization() -> Result<()> {
         let dir = tmp()?;
         let base_dir = dir.path();
+        let opts = mk_opts(base_dir)?;
         let sub_dir = base_dir.join("sub");
         fs::create_dir(&sub_dir)?;
 
@@ -372,7 +402,7 @@ resources:
         )?;
 
         let analyzer = KustomizeAnalyzer {};
-        let deps = analyzer.dependencies(base_dir)?;
+        let deps = analyzer.dependencies(base_dir.to_str().unwrap(), &opts)?;
 
         assert_eq!(distinct_deps(deps), 1);
 
@@ -383,11 +413,12 @@ resources:
     fn test_empty_kustomization() -> Result<()> {
         let dir = tmp()?;
         let base_dir = dir.path();
+        let opts = mk_opts(base_dir)?;
 
         create_kustomization(base_dir, "kustomization.yaml", "")?;
 
         let analyzer = KustomizeAnalyzer {};
-        let deps = analyzer.dependencies(base_dir)?;
+        let deps = analyzer.dependencies(base_dir.to_str().unwrap(), &opts)?;
 
         assert_eq!(distinct_deps(deps), 1);
 
@@ -398,6 +429,7 @@ resources:
     fn test_non_existent_file() -> Result<()> {
         let dir = tmp()?;
         let base_dir = dir.path();
+        let opts = mk_opts(base_dir)?;
 
         create_kustomization(
             base_dir,
@@ -409,7 +441,7 @@ resources:
         )?;
 
         let analyzer = KustomizeAnalyzer {};
-        let deps = analyzer.dependencies(base_dir)?;
+        let deps = analyzer.dependencies(base_dir.to_str().unwrap(), &opts)?;
 
         assert_eq!(distinct_deps(deps), 1);
 

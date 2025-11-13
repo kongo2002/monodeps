@@ -7,10 +7,11 @@ use std::sync::OnceLock;
 use anyhow::{Result, anyhow};
 use serde::Deserialize;
 
+use crate::cli::Opts;
 use crate::config::DepPattern;
 use crate::path::PathInfo;
 
-use super::{non_hidden_files, parent_dir};
+use super::{LanguageAnalyzer, non_hidden_files, parent_dir};
 
 pub(super) struct JavaScriptAnalyzer {
     root: PathInfo,
@@ -28,11 +29,10 @@ impl JavaScriptAnalyzer {
         self.packages
             .get_or_init(|| try_load_packages(&self.root.canonicalized))
     }
+}
 
-    pub(super) fn dependencies<P>(&self, dir: P) -> Result<Vec<DepPattern>>
-    where
-        P: AsRef<Path>,
-    {
+impl LanguageAnalyzer for JavaScriptAnalyzer {
+    fn dependencies(&self, dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
         let mut deps = Vec::new();
 
         let all_packages = self.packages();

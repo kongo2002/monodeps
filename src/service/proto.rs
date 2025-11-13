@@ -4,10 +4,11 @@ use std::sync::OnceLock;
 use anyhow::Result;
 use walkdir::DirEntry;
 
+use crate::cli::Opts;
 use crate::config::DepPattern;
 use crate::path::PathInfo;
 
-use super::{non_hidden_files, read_lines};
+use super::{LanguageAnalyzer, non_hidden_files, read_lines};
 
 const SCAN_MAX_LINES: usize = 200;
 
@@ -26,10 +27,14 @@ impl ProtoAnalyzer {
         }
     }
 
-    pub(super) fn dependencies<P>(&self, dir: P) -> Result<Vec<DepPattern>>
-    where
-        P: AsRef<Path>,
-    {
+    fn proto_files(&self) -> &Vec<PathInfo> {
+        self.all_proto_files
+            .get_or_init(|| try_find_all_proto_files(&self.root.canonicalized))
+    }
+}
+
+impl LanguageAnalyzer for ProtoAnalyzer {
+    fn dependencies(&self, dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
         let all_protos = self.proto_files();
         let mut dependencies = Vec::new();
 
@@ -43,11 +48,6 @@ impl ProtoAnalyzer {
         }
 
         Ok(dependencies)
-    }
-
-    fn proto_files(&self) -> &Vec<PathInfo> {
-        self.all_proto_files
-            .get_or_init(|| try_find_all_proto_files(&self.root.canonicalized))
     }
 }
 

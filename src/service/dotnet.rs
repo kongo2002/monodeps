@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Result, anyhow};
 use sxd_xpath::{Context, Factory, XPath};
@@ -7,7 +7,7 @@ use crate::cli::Opts;
 use crate::config::DepPattern;
 use crate::service::parent_dir;
 
-use super::non_hidden_files;
+use super::{LanguageAnalyzer, non_hidden_files};
 
 struct Import {
     service_dir: String,
@@ -28,10 +28,39 @@ impl DotnetAnalyzer {
         Ok(Self { proj_refs })
     }
 
-    pub fn dependencies<P>(&self, dir: P, opts: &Opts) -> Result<Vec<DepPattern>>
-    where
-        P: AsRef<Path>,
-    {
+    fn extract_project_references(
+        &self,
+        content: &str,
+        package_namespaces: &[String],
+    ) -> Result<Vec<String>> {
+        let parsed_xml = sxd_document::parser::parse(content)?;
+        let xml_doc = parsed_xml.as_document();
+
+        let context = Context::new();
+        let proj_ref = self.proj_refs.evaluate(&context, xml_doc.root())?;
+
+        Ok(match proj_ref {
+            sxd_xpath::Value::Nodeset(nodeset) => nodeset
+                .into_iter()
+                .flat_map(|node| {
+                    node.attribute()
+                        .and_then(|attr| extract_project_dir(attr.value()))
+                })
+                .filter(|import| {
+                    package_namespaces.is_empty()
+                        || package_namespaces
+                            .iter()
+                            .any(|package| import.name.starts_with(package))
+                })
+                .map(|import| import.service_dir)
+                .collect(),
+            _ => vec![],
+        })
+    }
+}
+
+impl LanguageAnalyzer for DotnetAnalyzer {
+    fn dependencies(&self, dir: &str, opts: &Opts) -> Result<Vec<DepPattern>> {
         let mut collected_imports = Vec::new();
 
         for entry in non_hidden_files(&dir) {
@@ -66,36 +95,6 @@ impl DotnetAnalyzer {
         }
 
         Ok(collected_imports)
-    }
-
-    fn extract_project_references(
-        &self,
-        content: &str,
-        package_namespaces: &[String],
-    ) -> Result<Vec<String>> {
-        let parsed_xml = sxd_document::parser::parse(content)?;
-        let xml_doc = parsed_xml.as_document();
-
-        let context = Context::new();
-        let proj_ref = self.proj_refs.evaluate(&context, xml_doc.root())?;
-
-        Ok(match proj_ref {
-            sxd_xpath::Value::Nodeset(nodeset) => nodeset
-                .into_iter()
-                .flat_map(|node| {
-                    node.attribute()
-                        .and_then(|attr| extract_project_dir(attr.value()))
-                })
-                .filter(|import| {
-                    package_namespaces.is_empty()
-                        || package_namespaces
-                            .iter()
-                            .any(|package| import.name.starts_with(package))
-                })
-                .map(|import| import.service_dir)
-                .collect(),
-            _ => vec![],
-        })
     }
 }
 

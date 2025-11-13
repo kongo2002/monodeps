@@ -1,22 +1,18 @@
 use std::collections::HashSet;
-use std::path::Path;
 
 use anyhow::Result;
 
 use crate::cli::Opts;
 use crate::config::{DepPattern, GoDepsConfig};
 
-use super::{non_hidden_files, read_lines};
+use super::{LanguageAnalyzer, non_hidden_files, read_lines};
 
 const SCAN_MAX_LINES: usize = 300;
 
 pub(super) struct GoAnalyzer {}
 
-impl GoAnalyzer {
-    pub(super) fn dependencies<P>(&self, dir: P, config: &Opts) -> Result<Vec<DepPattern>>
-    where
-        P: AsRef<Path>,
-    {
+impl LanguageAnalyzer for GoAnalyzer {
+    fn dependencies(&self, dir: &str, config: &Opts) -> Result<Vec<DepPattern>> {
         let mut collected_imports = HashSet::new();
 
         for entry in non_hidden_files(&dir) {

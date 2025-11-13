@@ -64,127 +64,122 @@ impl Display for BuildTrigger {
     }
 }
 
+trait LanguageAnalyzer {
+    fn dependencies(&self, dir: &str, opts: &Opts) -> Result<Vec<DepPattern>>;
+}
+
 struct Analyzer {
-    dotnet: Option<DotnetAnalyzer>,
-    go: Option<GoAnalyzer>,
-    flutter: Option<FlutterAnalyzer>,
-    kustomization: Option<KustomizeAnalyzer>,
-    javascript: Option<JavaScriptAnalyzer>,
-    protobuf: Option<ProtoAnalyzer>,
-    justfile: Option<JustfileAnalyzer>,
+    analyzers: HashMap<Language, Box<dyn LanguageAnalyzer>>,
 }
 
 impl Analyzer {
     fn new(opts: &Opts) -> Analyzer {
-        let dotnet = if opts.config.auto_discovery_enabled(&Language::Dotnet) {
-            DotnetAnalyzer::new()
-                .map_err(|err| {
-                    log::warn!("failed to initialize dependency analyzer for .NET: {err}");
-                    err
-                })
-                .ok()
-        } else {
-            None
-        };
+        let all_languages = vec![
+            Language::Golang,
+            Language::Dotnet,
+            Language::Flutter,
+            Language::Kustomize,
+            Language::JavaScript,
+            Language::Protobuf,
+            Language::Justfile,
+        ];
 
-        let go = if opts.config.auto_discovery_enabled(&Language::Golang) {
-            Some(GoAnalyzer {})
-        } else {
-            None
-        };
+        let analyzers: HashMap<_, _> = all_languages
+            .into_iter()
+            .flat_map(|language| {
+                language_analyzer(language, opts).map(|analyzer| (language, analyzer))
+            })
+            .collect();
 
-        let flutter = if opts.config.auto_discovery_enabled(&Language::Flutter) {
-            Some(FlutterAnalyzer::new(&opts.target))
-        } else {
-            None
-        };
-
-        let kustomization = if opts.config.auto_discovery_enabled(&Language::Kustomize) {
-            Some(KustomizeAnalyzer {})
-        } else {
-            None
-        };
-
-        let javascript = if opts.config.auto_discovery_enabled(&Language::JavaScript) {
-            Some(JavaScriptAnalyzer::new(opts.target.clone()))
-        } else {
-            None
-        };
-
-        let protobuf = if opts.config.auto_discovery_enabled(&Language::Protobuf) {
-            Some(ProtoAnalyzer::new(opts.target.clone()))
-        } else {
-            None
-        };
-
-        let justfile = if opts.config.auto_discovery_enabled(&Language::Justfile) {
-            Some(JustfileAnalyzer {})
-        } else {
-            None
-        };
-
-        Self {
-            dotnet,
-            go,
-            flutter,
-            kustomization,
-            javascript,
-            protobuf,
-            justfile,
-        }
+        Self { analyzers }
     }
 
-    fn auto_discover<P>(&self, language: &Language, dir: P, opts: &Opts) -> Vec<DepPattern>
-    where
-        P: AsRef<Path>,
-    {
-        let result = match language {
-            Language::Golang => self
-                .go
-                .as_ref()
-                .map(|analyzer| analyzer.dependencies(&dir, opts))
-                .unwrap_or_else(|| Ok(Vec::new())),
-            Language::Dotnet => self
-                .dotnet
-                .as_ref()
-                .map(|analyzer| analyzer.dependencies(&dir, opts))
-                .unwrap_or_else(|| Ok(Vec::new())),
-            Language::Flutter => self
-                .flutter
-                .as_ref()
-                .map(|analyzer| analyzer.dependencies(&dir))
-                .unwrap_or_else(|| Ok(Vec::new())),
-            Language::Kustomize => self
-                .kustomization
-                .as_ref()
-                .map(|analyzer| analyzer.dependencies(&dir))
-                .unwrap_or_else(|| Ok(Vec::new())),
-            Language::JavaScript => self
-                .javascript
-                .as_ref()
-                .map(|analyzer| analyzer.dependencies(&dir))
-                .unwrap_or_else(|| Ok(Vec::new())),
-            Language::Protobuf => self
-                .protobuf
-                .as_ref()
-                .map(|analyzer| analyzer.dependencies(&dir))
-                .unwrap_or_else(|| Ok(Vec::new())),
-            Language::Justfile => self
-                .justfile
-                .as_ref()
-                .map(|analyzer| analyzer.dependencies(&dir))
-                .unwrap_or_else(|| Ok(Vec::new())),
-        };
+    fn discover(&self, languages: &[Language], dir: &str, opts: &Opts) -> Vec<AutoDependency> {
+        let analyzers = languages.iter().flat_map(|language| {
+            self.analyzers
+                .get(language)
+                .map(|analyzer| (language, analyzer))
+        });
 
-        match result {
-            Ok(deps) => deps,
-            Err(err) => {
-                log::warn!(
-                    "failed to auto-discover dependencies: {err} [{}]",
-                    dir.as_ref().display()
-                );
+        analyzers
+            .flat_map(|(language, analyzer)| {
+                let result = analyzer.dependencies(dir, opts);
 
-                Vec::new()
+                match result {
+                    Ok(deps) => deps
+                        .into_iter()
+                        .map(|pattern| AutoDependency {
+                            language: *language,
+                            pattern,
+                        })
+                        .collect(),
+                    Err(err) => {
+                        log::warn!(
+                            "{language}: failed to auto-discover dependencies: {err} [{dir}]",
+                        );
+                        Vec::new()
+                    }
+                }
+            })
+            .collect()
+    }
+}
+
+fn language_analyzer(language: Language, opts: &Opts) -> Option<Box<dyn LanguageAnalyzer>> {
+    match language {
+        Language::Golang => {
+            if opts.config.auto_discovery_enabled(&language) {
+                Some(Box::new(GoAnalyzer {}))
+            } else {
+                None
+            }
+        }
+        Language::Dotnet => {
+            if opts.config.auto_discovery_enabled(&language) {
+                match DotnetAnalyzer::new() {
+                    Ok(a) => Some(Box::new(a)),
+                    Err(err) => {
+                        log::warn!("failed to initialize dependency analyzer for .NET: {err}");
+                        None
+                    }
+                }
+            } else {
+                None
+            }
+        }
+        Language::Flutter => {
+            if opts.config.auto_discovery_enabled(&language) {
+                Some(Box::new(FlutterAnalyzer::new(&opts.target)))
+            } else {
+                None
+            }
+        }
+        Language::Kustomize => {
+            if opts.config.auto_discovery_enabled(&language) {
+                Some(Box::new(KustomizeAnalyzer {}))
+            } else {
+                None
+            }
+        }
+        Language::JavaScript => {
+            if opts.config.auto_discovery_enabled(&language) {
+                Some(Box::new(JavaScriptAnalyzer::new(opts.target.clone())))
+            } else {
+                None
+            }
+        }
+        Language::Protobuf => {
+            if opts.config.auto_discovery_enabled(&language) {
+                Some(Box::new(ProtoAnalyzer::new(opts.target.clone())))
+            } else {
+                None
+            }
+        }
+        Language::Justfile => {
+            if opts.config.auto_discovery_enabled(&language) {
+                Some(Box::new(JustfileAnalyzer {}))
+            } else {
+                None
             }
         }
     }
@@ -286,18 +281,13 @@ impl Service {
         // try to determine all dependencies of languages we detected
         // in this service folder
         let mut unique_auto_dep_paths = HashSet::new();
-        let auto_dependencies = depsfile
-            .languages
-            .iter()
-            .flat_map(|language| {
-                analyzer
-                    .auto_discover(language, &ctx.service_location.canonicalized, opts)
-                    .into_iter()
-                    .map(|pattern| AutoDependency {
-                        language: *language,
-                        pattern,
-                    })
-            })
+        let auto_dependencies = analyzer
+            .discover(
+                &depsfile.languages,
+                &ctx.service_location.canonicalized,
+                opts,
+            )
+            .into_iter()
             .filter(|auto_dep| {
                 // auto-discovered dependencies could be "anywhere", that's why we filter
                 // out all that are directly below this service directory
