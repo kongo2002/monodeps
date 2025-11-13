@@ -86,6 +86,7 @@ impl Analyzer {
 
         let analyzers: HashMap<_, _> = all_languages
             .into_iter()
+            .filter(|language| opts.config.auto_discovery_enabled(language))
             .flat_map(|language| {
                 language_analyzer(language, opts).map(|analyzer| (language, analyzer))
             })
@@ -127,61 +128,19 @@ impl Analyzer {
 
 fn language_analyzer(language: Language, opts: &Opts) -> Option<Box<dyn LanguageAnalyzer>> {
     match language {
-        Language::Golang => {
-            if opts.config.auto_discovery_enabled(&language) {
-                Some(Box::new(GoAnalyzer {}))
-            } else {
+        Language::Golang => Some(Box::new(GoAnalyzer {})),
+        Language::Dotnet => match DotnetAnalyzer::new() {
+            Ok(a) => Some(Box::new(a)),
+            Err(err) => {
+                log::warn!("failed to initialize dependency analyzer for .NET: {err}");
                 None
             }
-        }
-        Language::Dotnet => {
-            if opts.config.auto_discovery_enabled(&language) {
-                match DotnetAnalyzer::new() {
-                    Ok(a) => Some(Box::new(a)),
-                    Err(err) => {
-                        log::warn!("failed to initialize dependency analyzer for .NET: {err}");
-                        None
-                    }
-                }
-            } else {
-                None
-            }
-        }
-        Language::Flutter => {
-            if opts.config.auto_discovery_enabled(&language) {
-                Some(Box::new(FlutterAnalyzer::new(&opts.target)))
-            } else {
-                None
-            }
-        }
-        Language::Kustomize => {
-            if opts.config.auto_discovery_enabled(&language) {
-                Some(Box::new(KustomizeAnalyzer {}))
-            } else {
-                None
-            }
-        }
-        Language::JavaScript => {
-            if opts.config.auto_discovery_enabled(&language) {
-                Some(Box::new(JavaScriptAnalyzer::new(opts.target.clone())))
-            } else {
-                None
-            }
-        }
-        Language::Protobuf => {
-            if opts.config.auto_discovery_enabled(&language) {
-                Some(Box::new(ProtoAnalyzer::new(opts.target.clone())))
-            } else {
-                None
-            }
-        }
-        Language::Justfile => {
-            if opts.config.auto_discovery_enabled(&language) {
-                Some(Box::new(JustfileAnalyzer {}))
-            } else {
-                None
-            }
-        }
+        },
+        Language::Flutter => Some(Box::new(FlutterAnalyzer::new(&opts.target))),
+        Language::Kustomize => Some(Box::new(KustomizeAnalyzer {})),
+        Language::JavaScript => Some(Box::new(JavaScriptAnalyzer::new(opts.target.clone()))),
+        Language::Protobuf => Some(Box::new(ProtoAnalyzer::new(opts.target.clone()))),
+        Language::Justfile => Some(Box::new(JustfileAnalyzer {})),
     }
 }
 
