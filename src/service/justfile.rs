@@ -5,7 +5,6 @@ use walkdir::DirEntry;
 
 use crate::cli::Opts;
 use crate::config::DepPattern;
-use crate::service::non_hidden_files;
 
 use super::{LanguageAnalyzer, read_lines};
 
@@ -14,14 +13,19 @@ const SCAN_MAX_LINES: usize = 200;
 pub(super) struct JustfileAnalyzer {}
 
 impl LanguageAnalyzer for JustfileAnalyzer {
-    fn dependencies(&self, dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
+    fn file_relevant(&self, file_name: &str) -> bool {
+        file_name == "justfile" || file_name.ends_with(".just")
+    }
+
+    fn dependencies(
+        &self,
+        entries: Vec<DirEntry>,
+        _dir: &str,
+        _opts: &Opts,
+    ) -> Result<Vec<DepPattern>> {
         let mut dependencies = Vec::new();
 
-        for entry in non_hidden_files(dir) {
-            if !is_justfile(&entry) {
-                continue;
-            }
-
+        for entry in entries {
             dependencies.extend(extract_imports(entry.path())?);
         }
 
@@ -69,16 +73,6 @@ fn extract_from_line(line: &str, dir: &Path) -> Option<DepPattern> {
 
     // TODO: support transitive dependencies
     DepPattern::new(parts[1], dir).ok()
-}
-
-fn is_justfile(entry: &DirEntry) -> bool {
-    let file_name = entry.file_name();
-
-    file_name.eq_ignore_ascii_case("justfile")
-        || file_name
-            .to_str()
-            .map(|name| name.ends_with(".just"))
-            .unwrap_or(false)
 }
 
 #[cfg(test)]

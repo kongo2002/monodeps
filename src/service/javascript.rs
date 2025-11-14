@@ -6,6 +6,7 @@ use std::sync::OnceLock;
 
 use anyhow::{Result, anyhow};
 use serde::Deserialize;
+use walkdir::DirEntry;
 
 use crate::cli::Opts;
 use crate::config::DepPattern;
@@ -32,7 +33,16 @@ impl JavaScriptAnalyzer {
 }
 
 impl LanguageAnalyzer for JavaScriptAnalyzer {
-    fn dependencies(&self, dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
+    fn file_relevant(&self, file_name: &str) -> bool {
+        file_name == "package.json"
+    }
+
+    fn dependencies(
+        &self,
+        entries: Vec<DirEntry>,
+        _dir: &str,
+        _opts: &Opts,
+    ) -> Result<Vec<DepPattern>> {
         let mut deps = Vec::new();
 
         let all_packages = self.packages();
@@ -40,11 +50,7 @@ impl LanguageAnalyzer for JavaScriptAnalyzer {
             return Ok(deps);
         }
 
-        for entry in non_hidden_files(dir) {
-            if !entry.file_name().eq("package.json") {
-                continue;
-            }
-
+        for entry in entries {
             let package_json = parse_package_json(entry.path())?;
 
             let all_dependencies = package_json

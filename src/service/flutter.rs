@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::path::PathBuf;
+use walkdir::DirEntry;
 use yaml_rust::Yaml;
 
 use crate::cli::Opts;
@@ -8,7 +9,7 @@ use crate::path::PathInfo;
 use crate::service::parent_dir;
 use crate::utils::{load_yaml, yaml_str_list};
 
-use super::{LanguageAnalyzer, non_hidden_files};
+use super::LanguageAnalyzer;
 
 struct Workspace {
     dependencies: Vec<DepPattern>,
@@ -27,14 +28,19 @@ impl FlutterAnalyzer {
 }
 
 impl LanguageAnalyzer for FlutterAnalyzer {
-    fn dependencies(&self, dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
+    fn file_relevant(&self, file_name: &str) -> bool {
+        file_name == "pubspec.yaml"
+    }
+
+    fn dependencies(
+        &self,
+        entries: Vec<DirEntry>,
+        _dir: &str,
+        _opts: &Opts,
+    ) -> Result<Vec<DepPattern>> {
         let mut dependencies = Vec::new();
 
-        for entry in non_hidden_files(&dir) {
-            if !entry.file_name().eq_ignore_ascii_case("pubspec.yaml") {
-                continue;
-            }
-
+        for entry in entries {
             let pubspec_dir = match parent_dir(entry.path()) {
                 Some(d) => d,
                 None => continue,

@@ -34,15 +34,20 @@ impl ProtoAnalyzer {
 }
 
 impl LanguageAnalyzer for ProtoAnalyzer {
-    fn dependencies(&self, dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
+    fn file_relevant(&self, file_name: &str) -> bool {
+        file_name.ends_with("proto")
+    }
+
+    fn dependencies(
+        &self,
+        entries: Vec<DirEntry>,
+        _dir: &str,
+        _opts: &Opts,
+    ) -> Result<Vec<DepPattern>> {
         let all_protos = self.proto_files();
         let mut dependencies = Vec::new();
 
-        for entry in non_hidden_files(dir) {
-            if !is_proto(&entry) {
-                continue;
-            }
-
+        for entry in entries {
             let imports = extract_proto_imports(entry.path(), all_protos)?;
             dependencies.extend(imports);
         }

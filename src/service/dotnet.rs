@@ -2,12 +2,13 @@ use std::path::PathBuf;
 
 use anyhow::{Result, anyhow};
 use sxd_xpath::{Context, Factory, XPath};
+use walkdir::DirEntry;
 
 use crate::cli::Opts;
 use crate::config::DepPattern;
 use crate::service::parent_dir;
 
-use super::{LanguageAnalyzer, non_hidden_files};
+use super::LanguageAnalyzer;
 
 struct Import {
     service_dir: String,
@@ -60,18 +61,19 @@ impl DotnetAnalyzer {
 }
 
 impl LanguageAnalyzer for DotnetAnalyzer {
-    fn dependencies(&self, dir: &str, opts: &Opts) -> Result<Vec<DepPattern>> {
+    fn file_relevant(&self, file_name: &str) -> bool {
+        file_name.ends_with(".csproj")
+    }
+
+    fn dependencies(
+        &self,
+        entries: Vec<DirEntry>,
+        _dir: &str,
+        opts: &Opts,
+    ) -> Result<Vec<DepPattern>> {
         let mut collected_imports = Vec::new();
 
-        for entry in non_hidden_files(&dir) {
-            let extension = entry.path().extension();
-            if extension
-                .filter(|ext| ext.eq_ignore_ascii_case("csproj"))
-                .is_none()
-            {
-                continue;
-            }
-
+        for entry in entries {
             if log::log_enabled!(log::Level::Debug) {
                 log::debug!(
                     "dotnet: analyzing C# project file '{}'",

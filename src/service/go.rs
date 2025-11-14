@@ -1,26 +1,31 @@
 use std::collections::HashSet;
 
 use anyhow::Result;
+use walkdir::DirEntry;
 
 use crate::cli::Opts;
 use crate::config::{DepPattern, GoDepsConfig};
 
-use super::{LanguageAnalyzer, non_hidden_files, read_lines};
+use super::{LanguageAnalyzer, read_lines};
 
 const SCAN_MAX_LINES: usize = 300;
 
 pub(super) struct GoAnalyzer {}
 
 impl LanguageAnalyzer for GoAnalyzer {
-    fn dependencies(&self, dir: &str, config: &Opts) -> Result<Vec<DepPattern>> {
+    fn file_relevant(&self, file_name: &str) -> bool {
+        file_name.ends_with(".go")
+    }
+
+    fn dependencies(
+        &self,
+        entries: Vec<DirEntry>,
+        _dir: &str,
+        config: &Opts,
+    ) -> Result<Vec<DepPattern>> {
         let mut collected_imports = HashSet::new();
 
-        for entry in non_hidden_files(&dir) {
-            let filename = entry.file_name().to_str().unwrap_or("").to_lowercase();
-            if !filename.ends_with(".go") {
-                continue;
-            }
-
+        for entry in entries {
             let lines = read_lines(entry.path())?.map_while(Result::ok);
 
             collected_imports.extend(find_imports(lines, &config.config.auto_discovery.go)?);

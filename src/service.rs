@@ -65,7 +65,9 @@ impl Display for BuildTrigger {
 }
 
 trait LanguageAnalyzer {
-    fn dependencies(&self, dir: &str, opts: &Opts) -> Result<Vec<DepPattern>>;
+    fn dependencies(&self, entry: Vec<DirEntry>, dir: &str, opts: &Opts)
+    -> Result<Vec<DepPattern>>;
+    fn file_relevant(&self, file_name: &str) -> bool;
 }
 
 struct Analyzer {
@@ -74,6 +76,7 @@ struct Analyzer {
 
 impl Analyzer {
     fn new(opts: &Opts) -> Analyzer {
+        // TODO: we may miss a language here
         let all_languages = vec![
             Language::Golang,
             Language::Dotnet,
@@ -84,7 +87,7 @@ impl Analyzer {
             Language::Justfile,
         ];
 
-        let analyzers: HashMap<_, _> = all_languages
+        let analyzers = all_languages
             .into_iter()
             .filter(|language| opts.config.auto_discovery_enabled(language))
             .flat_map(|language| {
@@ -95,16 +98,51 @@ impl Analyzer {
         Self { analyzers }
     }
 
+    // the clippy warning about &Box<dyn T> is incomplete
+    #[allow(clippy::borrowed_box)]
+    fn gather_file_candidates(
+        &self,
+        analyzers: &Vec<(&Language, &Box<dyn LanguageAnalyzer>)>,
+        dir: &str,
+    ) -> HashMap<Language, Vec<DirEntry>> {
+        let mut file_candidates = HashMap::new();
+
+        for entry in non_hidden_files(dir) {
+            let file_name = match entry.file_name().to_str().map(|name| name.to_lowercase()) {
+                Some(val) => val,
+                None => continue,
+            };
+
+            for (lang, analyzer) in analyzers {
+                if !analyzer.file_relevant(&file_name) {
+                    continue;
+                }
+
+                let lang_candidates = file_candidates.entry(**lang).or_insert_with(Vec::new);
+                lang_candidates.push(entry.clone());
+            }
+        }
+
+        file_candidates
+    }
+
     fn discover(&self, languages: &[Language], dir: &str, opts: &Opts) -> Vec<AutoDependency> {
-        let analyzers = languages.iter().flat_map(|language| {
-            self.analyzers
-                .get(language)
-                .map(|analyzer| (language, analyzer))
-        });
+        let analyzers: Vec<_> = languages
+            .iter()
+            .flat_map(|language| {
+                self.analyzers
+                    .get(language)
+                    .map(|analyzer| (language, analyzer))
+            })
+            .collect();
+
+        let mut file_candidates = self.gather_file_candidates(&analyzers, dir);
 
         analyzers
+            .into_iter()
             .flat_map(|(language, analyzer)| {
-                let result = analyzer.dependencies(dir, opts);
+                let relevant_files = file_candidates.remove(language).unwrap_or_default();
+                let result = analyzer.dependencies(relevant_files, dir, opts);
 
                 match result {
                     Ok(deps) => deps
