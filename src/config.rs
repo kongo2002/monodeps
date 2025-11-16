@@ -118,6 +118,12 @@ impl DepPattern {
     }
 }
 
+impl AsRef<Path> for DepPattern {
+    fn as_ref(&self) -> &Path {
+        Path::new(&self.raw.canonicalized)
+    }
+}
+
 impl Display for DepPattern {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.pattern {

@@ -717,6 +717,32 @@ mod tests {
     }
 
     #[test]
+    fn resolve_dependencies_justfile_imports() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let justfile_opts = Opts {
+            supported_roots: vec![DepsfileType::Justfile],
+            ..opts
+        };
+        let services = Service::discover(&justfile_opts)?;
+
+        // 2 Depsfile + 4 justfile
+        assert_eq!(6, services.len());
+
+        let deps = dependency::resolve(
+            services,
+            vec!["service-f/justfile".to_string()],
+            &justfile_opts,
+        )?;
+
+        // - service-e
+        // - service-f
+        assert_eq!(2, deps.len());
+        expect_output(deps, vec!["service-e", "service-f"])?;
+
+        Ok(())
+    }
+
+    #[test]
     fn resolve_dependencies_k8s() -> Result<()> {
         let opts = mk_opts("./tests/examples/full")?;
         let justfile_opts = Opts {

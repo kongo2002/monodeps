@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::Path;
 
 use anyhow::{Result, anyhow};
@@ -24,26 +25,43 @@ impl LanguageAnalyzer for JustfileAnalyzer {
         _opts: &Opts,
     ) -> Result<Vec<DepPattern>> {
         let mut dependencies = Vec::new();
+        let mut found = HashSet::new();
 
         for entry in entries {
-            dependencies.extend(extract_imports(entry.path())?);
+            dependencies.extend(extract_imports(entry.path(), &mut found)?);
         }
 
         Ok(dependencies)
     }
 }
 
-fn extract_imports<P>(path: P) -> Result<Vec<DepPattern>>
+fn extract_imports<P>(path: P, found: &mut HashSet<String>) -> Result<Vec<DepPattern>>
 where
     P: AsRef<Path>,
 {
     let mut scanned_lines = 0usize;
     let mut imports = Vec::new();
 
+    let self_path = path
+        .as_ref()
+        .to_str()
+        .ok_or_else(|| anyhow!("cannot determine justfile path"))?
+        .to_string();
+
+    // check for cyclic dependencies
+    if !found.insert(self_path) {
+        return Ok(imports);
+    }
+
     let parent = path
         .as_ref()
         .parent()
         .ok_or_else(|| anyhow!("cannot determine parent directory"))?;
+
+    // ignore non-existing imports
+    if !path.as_ref().is_file() {
+        return Ok(imports);
+    }
 
     let lines = read_lines(&path)?.map_while(Result::ok);
 
@@ -54,6 +72,7 @@ where
         }
 
         if let Some(import) = extract_from_line(&line, parent) {
+            imports.extend(extract_imports(&import, found)?);
             imports.push(import);
         }
     }
@@ -71,7 +90,6 @@ fn extract_from_line(line: &str, dir: &Path) -> Option<DepPattern> {
         return None;
     }
 
-    // TODO: support transitive dependencies
     DepPattern::new(parts[1], dir).ok()
 }
 

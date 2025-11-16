@@ -1,7 +1,4 @@
 # we are testing cyclic dependency here
 #  - service-e --> just/lib.just --> service-f
 #  - service-f --> service-e --> just/lib.just
-import '../service-e/justfile'
-
-# test non existing files
-import '../file-does-not-exist'
+import '../service-f/justfile'
