@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::path::Path;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use regex::Regex;
 use yaml_rust::Yaml;
 
@@ -100,6 +100,13 @@ impl DepPattern {
         match &self.pattern {
             Some(patt) => patt.is_match(path),
             None => path.starts_with(&self.raw.canonicalized),
+        }
+    }
+
+    pub fn is_matched_by(&self, path: &str) -> bool {
+        match &self.pattern {
+            Some(patt) => patt.is_match(path),
+            None => self.raw.canonicalized.starts_with(path),
         }
     }
 
@@ -206,18 +213,18 @@ pub struct Depsfile {
 impl Depsfile {
     /// Attempt to load `Config` from the given file name that
     /// is expected to be a YAML file.
-    pub fn load<P>(file_type: DepsfileType, file: P, root_dir: &str) -> Result<Depsfile>
+    pub fn load<P>(file_type: DepsfileType, file: P) -> Result<Depsfile>
     where
         P: AsRef<Path> + Copy,
     {
         match file_type {
             DepsfileType::Depsfile => {
                 let config_yaml = load_yaml(file)?;
-                Depsfile::depsfile_from_yaml(config_yaml, file, root_dir)
+                Depsfile::depsfile_from_yaml(config_yaml, file)
             }
             DepsfileType::Buildfile => {
                 let config_yaml = load_yaml(file)?;
-                Depsfile::buildfile_from_yaml(config_yaml, file, root_dir)
+                Depsfile::buildfile_from_yaml(config_yaml, file)
             }
             DepsfileType::Justfile => Ok(Depsfile::empty()),
             DepsfileType::Makefile => Ok(Depsfile::empty()),
@@ -231,17 +238,23 @@ impl Depsfile {
         }
     }
 
-    fn depsfile_from_yaml<P>(config_yaml: Yaml, file: P, root_dir: &str) -> Result<Depsfile>
+    fn depsfile_from_yaml<P>(config_yaml: Yaml, file: P) -> Result<Depsfile>
     where
-        P: AsRef<Path> + Copy,
+        P: AsRef<Path>,
     {
-        let languages = parse_languages(&config_yaml["languages"], file, root_dir);
+        let dir = file
+            .as_ref()
+            .ancestors()
+            .nth(1)
+            .ok_or_else(|| anyhow!("cannot determine Depsfile directory"))?;
+
+        let languages = parse_languages(&config_yaml["languages"], &file);
         let dep_patterns = yaml_str_list(&config_yaml["dependencies"]);
 
         let dependencies = dep_patterns
             .into_iter()
             .flat_map(|dep| {
-                let dependency = DepPattern::new(&dep, root_dir);
+                let dependency = DepPattern::new(&dep, dir);
                 if dependency.is_err() {
                     log::warn!("{}: invalid dependency '{}'", file.as_ref().display(), dep);
                 }
@@ -275,10 +288,16 @@ impl Depsfile {
     }
 
     /// Try to parse the given `Yaml` into a valid `Config`
-    fn buildfile_from_yaml<P>(config_yaml: Yaml, file: P, root_dir: &str) -> Result<Depsfile>
+    fn buildfile_from_yaml<P>(config_yaml: Yaml, file: P) -> Result<Depsfile>
     where
-        P: AsRef<Path> + Copy,
+        P: AsRef<Path>,
     {
+        let dir = file
+            .as_ref()
+            .ancestors()
+            .nth(1)
+            .ok_or_else(|| anyhow!("cannot determine Depsfile directory"))?;
+
         let spec = &config_yaml["spec"];
         let depends_on = &spec["dependsOn"];
         let dep_patterns = yaml_str_list(depends_on);
@@ -295,7 +314,7 @@ impl Depsfile {
         let dependencies = dep_patterns
             .into_iter()
             .flat_map(|dep| {
-                let dependency = DepPattern::new(&dep, root_dir);
+                let dependency = DepPattern::new(&dep, dir);
                 if dependency.is_err() {
                     log::warn!("{}: invalid dependency '{}'", file.as_ref().display(), dep);
                 }
@@ -310,7 +329,7 @@ impl Depsfile {
     }
 }
 
-fn parse_languages<P>(value: &Yaml, file: P, root_dir: &str) -> Vec<Language>
+fn parse_languages<P>(value: &Yaml, file: P) -> Vec<Language>
 where
     P: AsRef<Path>,
 {
@@ -320,7 +339,7 @@ where
         .filter_map(|value| match value.as_str().try_into() {
             Ok(language) => Some(language),
             Err(err) => {
-                let path = file.as_ref().to_str().unwrap_or(root_dir);
+                let path = file.as_ref().display();
                 log::warn!("{path}: {err}");
                 None
             }
@@ -406,7 +425,7 @@ global_dependencies:
 
     #[test]
     fn load_depsfile_empty() {
-        let depsfile = Depsfile::depsfile_from_yaml(Yaml::from_str(""), "", "");
+        let depsfile = Depsfile::depsfile_from_yaml(Yaml::from_str(""), "/tmp/some/where");
 
         assert_eq!(depsfile.is_ok(), true);
     }
@@ -428,7 +447,7 @@ dependencies:
 "#,
         )?;
 
-        let depsfile = Depsfile::load(DepsfileType::Depsfile, &dir.path().join(file_name), ".")?;
+        let depsfile = Depsfile::load(DepsfileType::Depsfile, &dir.path().join(file_name))?;
 
         assert_eq!(vec![Language::Golang, Language::Dotnet], depsfile.languages);
         assert_eq!(1, depsfile.dependencies.len());
@@ -453,7 +472,7 @@ metadata:
 "#,
         )?;
 
-        let depsfile = Depsfile::load(DepsfileType::Buildfile, &dir.path().join(file_name), ".")?;
+        let depsfile = Depsfile::load(DepsfileType::Buildfile, &dir.path().join(file_name))?;
 
         assert_eq!(vec![Language::Golang], depsfile.languages);
         assert_eq!(1, depsfile.dependencies.len());
@@ -478,7 +497,7 @@ metadata:
 "#,
         )?;
 
-        let depsfile = Depsfile::load(DepsfileType::Buildfile, &dir.path().join(file_name), ".")?;
+        let depsfile = Depsfile::load(DepsfileType::Buildfile, &dir.path().join(file_name))?;
 
         assert_eq!(true, depsfile.languages.is_empty());
         assert_eq!(1, depsfile.dependencies.len());
@@ -489,7 +508,7 @@ metadata:
     #[test]
     fn load_config_no_dependencies() {
         let mut docs = YamlLoader::load_from_str("spec:").unwrap();
-        let config = Depsfile::depsfile_from_yaml(docs.remove(0), "", "");
+        let config = Depsfile::depsfile_from_yaml(docs.remove(0), "/tmp/some/where");
 
         assert_eq!(config.is_ok(), true);
     }

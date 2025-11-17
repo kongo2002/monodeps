@@ -38,11 +38,10 @@ pub enum BuildTrigger {
     GlobalDependency,
 }
 
-struct ServiceContext<'a> {
+struct ServiceContext {
     filetype: DepsfileType,
     depsfile_location: PathInfo,
     service_location: PathInfo,
-    root_dir: &'a str,
 }
 
 impl Display for BuildTrigger {
@@ -268,11 +267,7 @@ impl Service {
     fn discover_service(analyzer: &Analyzer, ctx: ServiceContext, opts: &Opts) -> Result<Service> {
         // read/parse dependency file (depsfile, buildfile...) and extract
         // any potential explicitly listed dependencies
-        let base_depsfile = Depsfile::load(
-            ctx.filetype,
-            &ctx.depsfile_location.canonicalized,
-            ctx.root_dir,
-        )?;
+        let base_depsfile = Depsfile::load(ctx.filetype, &ctx.depsfile_location.canonicalized)?;
 
         // try to determine what languages we can auto-discover
         let depsfile = auto_discover_languages(base_depsfile, &ctx.service_location);
@@ -568,12 +563,8 @@ fn map_depsfile(filename: &str, opts: &Opts) -> Option<DepsfileType> {
     filetype.filter(|ft| opts.is_supported(ft))
 }
 
-impl ServiceContext<'_> {
-    fn from_depsfile<'a>(
-        path: PathBuf,
-        root_dir: &'a str,
-        opts: &Opts,
-    ) -> Option<ServiceContext<'a>> {
+impl ServiceContext {
+    fn from_depsfile(path: PathBuf, root_dir: &str, opts: &Opts) -> Option<ServiceContext> {
         let filetype = map_depsfile(path.file_name()?.to_str()?, opts)?;
 
         if !path.is_file() {
@@ -589,7 +580,6 @@ impl ServiceContext<'_> {
             filetype,
             depsfile_location,
             service_location,
-            root_dir,
         })
     }
 
@@ -854,6 +844,25 @@ mod tests {
     }
 
     #[test]
+    fn resolve_dependencies_peer() -> Result<()> {
+        let opts = mk_opts("./tests/examples/peer")?;
+        let services = Service::discover(&opts)?;
+
+        // 3 Depsfile
+        assert_eq!(3, services.len());
+
+        let deps = dependency::resolve(services, vec!["lib-b/src".to_string()], &opts)?;
+
+        // - lib-a
+        // - lib-b
+        // - service
+        assert_eq!(3, deps.len());
+        expect_output(deps, vec!["service", "lib-a", "lib-b"])?;
+
+        Ok(())
+    }
+
+    #[test]
     fn resolve_dependencies_k8s_patch() -> Result<()> {
         let opts = mk_opts("./tests/examples/full")?;
         let justfile_opts = Opts {
@@ -949,14 +958,12 @@ mod tests {
             filetype: DepsfileType::Justfile,
             depsfile_location: PathInfo::new(".", ".")?,
             service_location: PathInfo::new(".", ".")?,
-            root_dir: ".",
         };
 
         let depsfile_ctx = ServiceContext {
             filetype: DepsfileType::Depsfile,
             depsfile_location: PathInfo::new(".", ".")?,
             service_location: PathInfo::new(".", ".")?,
-            root_dir: ".",
         };
 
         justfile_ctx.merge(depsfile_ctx, &all_opts);

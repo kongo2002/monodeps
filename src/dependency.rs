@@ -64,14 +64,12 @@ pub fn resolve(
     updated.extend(check_direct_dependencies(
         &mut service_map,
         &canon_changed_files,
-        BuildTrigger::Dependency,
     )?);
 
     // 4. now gather all services that depend on the services that we already found.
     // we repeat this until we find no additional peer dependencies
     loop {
-        updated =
-            check_direct_dependencies(&mut service_map, &updated, BuildTrigger::PeerDependency)?;
+        updated = check_peer_dependencies(&mut service_map, &updated)?;
         if updated.is_empty() {
             break;
         }
@@ -84,14 +82,10 @@ pub fn resolve(
         .collect())
 }
 
-fn check_direct_dependencies<T>(
+fn check_direct_dependencies(
     services: &mut HashMap<String, Service>,
     changed_files: &Vec<PathInfo>,
-    trigger: T,
-) -> Result<Vec<PathInfo>>
-where
-    T: Fn(String, bool) -> BuildTrigger,
-{
+) -> Result<Vec<PathInfo>> {
     let mut changed = Vec::new();
 
     for service in (*services).values_mut() {
@@ -103,7 +97,7 @@ where
             service_has_dependency(service, changed_files)
         {
             changed.push(service.path.clone());
-            service.trigger(trigger(
+            service.trigger(BuildTrigger::Dependency(
                 file_dependency.display_path.clone(),
                 auto_dependency,
             ));
@@ -111,6 +105,54 @@ where
     }
 
     Ok(changed)
+}
+
+fn check_peer_dependencies(
+    services: &mut HashMap<String, Service>,
+    changed_files: &Vec<PathInfo>,
+) -> Result<Vec<PathInfo>> {
+    let mut changed = Vec::new();
+
+    for service in (*services).values_mut() {
+        if service.has_trigger() {
+            continue;
+        }
+
+        if let Some((file_dependency, auto_dependency)) =
+            service_has_peer_dependency(service, changed_files)
+        {
+            changed.push(service.path.clone());
+            service.trigger(BuildTrigger::PeerDependency(
+                file_dependency.display_path.clone(),
+                auto_dependency,
+            ));
+        }
+    }
+
+    Ok(changed)
+}
+
+fn service_has_peer_dependency<'a>(
+    service: &Service,
+    changed_files: &'a Vec<PathInfo>,
+) -> Option<(&'a PathInfo, bool)> {
+    for changed_file in changed_files {
+        for dep in &service.depsfile.dependencies {
+            if dep.is_matched_by(&changed_file.canonicalized) {
+                // we found _some_ dependency on that service -> return early
+                return Some((changed_file, false));
+            }
+        }
+
+        for dep in &service.auto_dependencies {
+            if dep.pattern.is_matched_by(&changed_file.canonicalized) {
+                // we found _some_ dependency on that service -> return early
+                return Some((changed_file, true));
+            }
+        }
+    }
+
+    None
 }
 
 fn service_has_dependency<'a>(
