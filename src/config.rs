@@ -161,6 +161,9 @@ fn to_glob_regex(pattern: &str) -> Result<Regex> {
     Ok(rgx)
 }
 
+/// List of supported languages/frameworks
+///
+/// NOTE: remember to add new languages to `Analyzer::new`
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
 pub enum Language {
     Golang,

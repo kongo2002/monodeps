@@ -30,18 +30,19 @@ mod proto;
 
 const SCAN_MAX_LINES: usize = 300;
 
+/// The `BuildTrigger` describes the "cause" why a service was resolved as a relevant dependency.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum BuildTrigger {
+    /// Any of the service's own files was changed.
     FileChange,
+    /// A file was changed that is a direct dependency of the service.
     Dependency(String, bool),
+    /// The current service has a dependency on a service that itself was determined to be a
+    /// dependency ("peer dependency").
     PeerDependency(String, bool),
+    /// The service is a valid dependency because a file was changed that is in the list of
+    /// configured "global" dependencies.
     GlobalDependency,
-}
-
-struct ServiceContext {
-    filetype: DepsfileType,
-    depsfile_location: PathInfo,
-    service_location: PathInfo,
 }
 
 impl Display for BuildTrigger {
@@ -65,9 +66,21 @@ impl Display for BuildTrigger {
     }
 }
 
+/// Every language analyzer has to implement this trait, in order to auto-discover dependencies for
+/// a given service directory.
 trait LanguageAnalyzer {
-    fn dependencies(&self, entry: Vec<DirEntry>, dir: &str, opts: &Opts)
-    -> Result<Vec<DepPattern>>;
+    /// Auto-discover all dependencies for the given service directory (`dir`) and using the
+    /// pre-discovered, relevant file entries (`entries`).
+    fn dependencies(
+        &self,
+        entries: Vec<DirEntry>,
+        dir: &str,
+        opts: &Opts,
+    ) -> Result<Vec<DepPattern>>;
+
+    /// Predicate to determine whether the given file name may be relevant for the
+    /// `LanguageAnalyzer`. Will be potentially invoked for every file in the service directory,
+    /// before the actual auto-discovery is triggered.
     fn file_relevant(&self, file_name: &str) -> bool;
 }
 
@@ -76,8 +89,9 @@ struct Analyzer {
 }
 
 impl Analyzer {
+    /// Create a new `Analyzer` instance. It can be used across multiple different services,
+    /// meaning you usually have to instantiate only one instance for process.
     fn new(opts: &Opts) -> Analyzer {
-        // TODO: we may miss a language here
         let all_languages = vec![
             Language::Golang,
             Language::Dotnet,
@@ -88,6 +102,7 @@ impl Analyzer {
             Language::Justfile,
         ];
 
+        // collect all language analyzers that are properly configured and enabled
         let analyzers = all_languages
             .into_iter()
             .filter(|language| opts.config.auto_discovery_enabled(language))
@@ -99,7 +114,9 @@ impl Analyzer {
         Self { analyzers }
     }
 
-    // the clippy warning about &Box<dyn T> is incomplete
+    /// Gather all files that are potentially of interest of any of the enabled language analyzers.
+    /// Like this we are traversing the service's directory structure only once, and can afterwards
+    /// pass the collected file entries for each language analyzer separately.
     #[allow(clippy::borrowed_box)]
     fn gather_file_candidates(
         &self,
@@ -127,6 +144,8 @@ impl Analyzer {
         file_candidates
     }
 
+    /// Collect all auto-discoverable dependencies for the specified languages in the given service
+    /// directory (`dir`).
     fn discover(&self, languages: &[Language], dir: &str, opts: &Opts) -> Vec<AutoDependency> {
         let analyzers: Vec<_> = languages
             .iter()
@@ -165,6 +184,7 @@ impl Analyzer {
     }
 }
 
+/// Initialize a new `LanguageAnalyzer` for the given `language`.
 fn language_analyzer(language: Language, opts: &Opts) -> Option<Box<dyn LanguageAnalyzer>> {
     match language {
         Language::Golang => Some(Box::new(GoAnalyzer {})),
@@ -183,6 +203,8 @@ fn language_analyzer(language: Language, opts: &Opts) -> Option<Box<dyn Language
     }
 }
 
+/// The `Service` is the main structure that holds all service relevant information during
+/// discovery and resolve phase.
 #[derive(Debug)]
 pub struct Service {
     pub path: PathInfo,
@@ -237,6 +259,10 @@ impl Service {
         self.trigger.replace(trigger);
     }
 
+    /// Attempt to discover a `Service` using the specified `path`. The `path` is either a service
+    /// "root" file itself, or its parent directory. This will also discover the service, meaning
+    /// running any auto-discovery if possible.
+    /// This method will respect the enabled service roots and options in general, via `Opts`.
     pub fn try_determine(path: &str, opts: &Opts) -> Result<Service> {
         let analyzer = Analyzer::new(opts);
         let root_dir = &opts.target.canonicalized;
@@ -264,6 +290,9 @@ impl Service {
         Service::discover_service(&analyzer, ctx, opts)
     }
 
+    /// Run the main service discovery, meaning service root lookup (according to given `Opts`),
+    /// parsing of Depsfiles, auto-discovery the available languages and finally the auto-discovery
+    /// of dependencies.
     fn discover_service(analyzer: &Analyzer, ctx: ServiceContext, opts: &Opts) -> Result<Service> {
         // read/parse dependency file (depsfile, buildfile...) and extract
         // any potential explicitly listed dependencies
@@ -303,6 +332,9 @@ impl Service {
         })
     }
 
+    /// Run the main discovery routine according to the given `Opts`. In general, this would try to
+    /// discover all available services in the target directory and run the discovery step for each
+    /// of them (see `discover_service`).
     pub fn discover(opts: &Opts) -> Result<Vec<Service>> {
         let analyzer = Analyzer::new(opts);
         let root_dir = &opts.target.canonicalized;
@@ -338,6 +370,8 @@ fn not_within_service(service_dir: &PathInfo, pattern: &DepPattern) -> bool {
     !pattern.is_child_of(&service_dir.canonicalized)
 }
 
+/// Try to auto-discover the languages available in the given service directory (at `path`). The
+/// languages discovery is skipped if the Depsfile lists languages explicitly.
 fn auto_discover_languages(depsfile: Depsfile, path: &PathInfo) -> Depsfile {
     if !depsfile.languages.is_empty() {
         return depsfile;
@@ -369,6 +403,7 @@ struct LanguageMatch {
     score: i32,
 }
 
+/// Try to map the given file/directory entry to a `Language` and a "score".
 fn try_determine_language(entry: &DirEntry) -> Option<LanguageMatch> {
     let extension = entry.path().extension().and_then(|ext| ext.to_str());
 
@@ -443,6 +478,8 @@ fn try_determine_language(entry: &DirEntry) -> Option<LanguageMatch> {
     }
 }
 
+/// Return a `DirEntry` iterator of all files and folders in the given directory (`dir`) that are
+/// not hidden or part of `node_modules`.
 fn non_hidden_files<P>(dir: P) -> impl IntoIterator<Item = DirEntry>
 where
     P: AsRef<Path>,
@@ -460,6 +497,9 @@ where
         .filter_map(|e| e.ok())
 }
 
+/// Helper structure the recursively find line-based file references in language files (e.g.
+/// "imports" in protobuf or justfiles). The method `extract_from` supports detection of cyclic
+/// dependencies.
 struct ReferenceFinder {
     found: HashSet<String>,
 }
@@ -561,6 +601,15 @@ fn map_depsfile(filename: &str, opts: &Opts) -> Option<DepsfileType> {
     };
 
     filetype.filter(|ft| opts.is_supported(ft))
+}
+
+/// The `ServiceContext` contains all location relevant information of a service, meaning the type
+/// of service "root" (`DepsfileType`) and the locations of both the service itself and the service
+/// root file. This structure is part of the discovery phase.
+struct ServiceContext {
+    filetype: DepsfileType,
+    depsfile_location: PathInfo,
+    service_location: PathInfo,
 }
 
 impl ServiceContext {
