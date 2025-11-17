@@ -1,0 +1,9 @@
+// we include an unknown import
+import "whatever/does/not/exist.proto";
+
+// and a cyclic dependency
+import "full/proto/model.proto";
+
+message SomeMessage {
+  string message = 1;
+}

@@ -28,6 +28,8 @@ mod justfile;
 mod kustomize;
 mod proto;
 
+const SCAN_MAX_LINES: usize = 300;
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum BuildTrigger {
     FileChange,
@@ -463,6 +465,71 @@ where
         .filter_map(|e| e.ok())
 }
 
+struct ReferenceFinder {
+    found: HashSet<String>,
+}
+
+impl ReferenceFinder {
+    fn new() -> Self {
+        Self {
+            found: HashSet::new(),
+        }
+    }
+
+    fn extract_from<P, F>(&mut self, path: P, extractor: &F) -> Result<Vec<DepPattern>>
+    where
+        P: AsRef<Path>,
+        F: Fn(String, &Path) -> Option<DepPattern>,
+    {
+        let mut scanned_lines = 0usize;
+        let mut imports = Vec::new();
+
+        let self_path = path
+            .as_ref()
+            .to_str()
+            .ok_or_else(|| {
+                anyhow!(
+                    "cannot determine path component {}",
+                    path.as_ref().display()
+                )
+            })?
+            .to_string();
+
+        // check for cyclic dependencies
+        if !self.found.insert(self_path) {
+            return Ok(imports);
+        }
+
+        let parent = path.as_ref().parent().ok_or_else(|| {
+            anyhow!(
+                "cannot determine parent directory: {}",
+                path.as_ref().display()
+            )
+        })?;
+
+        // ignore non-existing imports
+        if !path.as_ref().is_file() {
+            return Ok(imports);
+        }
+
+        let lines = read_lines(&path)?.map_while(Result::ok);
+
+        for line in lines {
+            scanned_lines += 1;
+            if scanned_lines > SCAN_MAX_LINES {
+                break;
+            }
+
+            if let Some(import) = extractor(line, parent) {
+                imports.extend(self.extract_from(&import, extractor)?);
+                imports.push(import);
+            }
+        }
+
+        Ok(imports)
+    }
+}
+
 fn parent_dir(filename: &Path) -> Option<PathBuf> {
     let path = PathBuf::from(filename);
     path.ancestors().nth(1).map(|x| x.to_owned())
@@ -533,7 +600,7 @@ where
 mod tests {
     use std::io::Cursor;
 
-    use anyhow::Result;
+    use anyhow::{Result, anyhow};
 
     use crate::cli::Opts;
     use crate::config::{AutoDiscoveryConfig, Config, DepsfileType, DotnetConfig, GoDepsConfig};
@@ -586,6 +653,23 @@ mod tests {
         Ok(opts)
     }
 
+    fn contains_auto_deps(service: &Service, deps: &[&str]) {
+        for dep in deps {
+            assert!(
+                service.auto_dependencies.iter().any(|auto_dep| {
+                    auto_dep
+                        .pattern
+                        .as_ref()
+                        .to_str()
+                        .map(|s| s.contains(dep))
+                        .unwrap_or(false)
+                }),
+                "auto-dependencies does not contains '{}'",
+                dep
+            );
+        }
+    }
+
     #[test]
     fn discover_services_not_exist() -> Result<()> {
         let opts = mk_opts("does_not_exist")?;
@@ -631,6 +715,34 @@ mod tests {
     }
 
     #[test]
+    fn discover_services_proto() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let makefile_opts = Opts {
+            supported_roots: vec![DepsfileType::Makefile],
+            ..opts
+        };
+        let services = Service::discover(&makefile_opts)?;
+
+        // 2 Depsfile + 2 Makefiles
+        assert_eq!(4, services.len());
+
+        let service_g =
+            get_service(services, "service-g").ok_or_else(|| anyhow!("missing service-g"))?;
+
+        // - proto/api.proto
+        // - proto/common.proto
+        // - proto/model.proto
+        assert_eq!(3, service_g.auto_dependencies.len());
+
+        contains_auto_deps(
+            &service_g,
+            &vec!["api.proto", "common.proto", "model.proto"],
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn discover_services_justfile() -> Result<()> {
         let opts = mk_opts("./tests/examples/full")?;
         let justfile_opts = Opts {
@@ -642,13 +754,42 @@ mod tests {
         // 2 Depsfile + 4 justfiles
         assert_eq!(6, services.len());
 
-        let service_a = get_service(services, "service-a");
-
-        assert!(service_a.is_some(), "service-a was not discovered");
+        let service_a =
+            get_service(services, "service-a").ok_or_else(|| anyhow!("service-a not found"))?;
 
         // - shared/something
         // - pkg/some
-        assert_eq!(2, service_a.unwrap().auto_dependencies.len());
+        assert_eq!(2, service_a.auto_dependencies.len());
+
+        contains_auto_deps(&service_a, &vec!["shared/something", "pkg/some"]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn discover_services_justfile_transitive() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let justfile_opts = Opts {
+            supported_roots: vec![DepsfileType::Justfile],
+            ..opts
+        };
+        let services = Service::discover(&justfile_opts)?;
+
+        // 2 Depsfile + 4 justfiles
+        assert_eq!(6, services.len());
+
+        let service_e =
+            get_service(services, "service-e").ok_or_else(|| anyhow!("service-e not found"))?;
+
+        // - service-f
+        // - just/lib.just
+        // - file-does-not-exist
+        assert_eq!(3, service_e.auto_dependencies.len());
+
+        contains_auto_deps(
+            &service_e,
+            &vec!["service-f", "file-does-not-exist", "just/lib.just"],
+        );
 
         Ok(())
     }
@@ -662,8 +803,8 @@ mod tests {
         };
         let services = Service::discover(&makefile_opts)?;
 
-        // 2 Depsfile + 1 Makefile
-        assert_eq!(3, services.len());
+        // 2 Depsfile + 2 Makefile
+        assert_eq!(4, services.len());
 
         Ok(())
     }
@@ -677,8 +818,8 @@ mod tests {
         };
         let services = Service::discover(&all_opts)?;
 
-        // 2 Depsfile + 1 Makefile + 4 justfile
-        assert_eq!(7, services.len());
+        // 2 Depsfile + 2 Makefile + 4 justfile
+        assert_eq!(8, services.len());
 
         let deps = dependency::resolve(services, vec!["shared/something".to_string()], &all_opts)?;
 
@@ -813,8 +954,8 @@ mod tests {
         };
         let services = Service::discover(&all_opts)?;
 
-        // 2 Depsfile + 1 Makefile + 4 justfile
-        assert_eq!(7, services.len());
+        // 2 Depsfile + 2 Makefile + 4 justfile
+        assert_eq!(8, services.len());
 
         let deps = dependency::resolve(
             services,
@@ -845,8 +986,8 @@ mod tests {
         };
         let services = Service::discover(&all_opts)?;
 
-        // 2 Depsfile + 1 Makefile + 4 justfile
-        assert_eq!(7, services.len());
+        // 2 Depsfile + 2 Makefile + 4 justfile
+        assert_eq!(8, services.len());
 
         let deps = dependency::resolve(
             services,
@@ -860,8 +1001,9 @@ mod tests {
         // - service-d
         // - service-e
         // - service-f
+        // - service-g
         // - shared
-        assert_eq!(7, deps.len());
+        assert_eq!(8, deps.len());
         expect_output(
             deps,
             vec![
@@ -871,6 +1013,7 @@ mod tests {
                 "service-d",
                 "service-e",
                 "service-f",
+                "service-g",
                 "shared",
             ],
         )?;

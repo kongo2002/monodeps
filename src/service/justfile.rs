@@ -1,15 +1,13 @@
-use std::collections::HashSet;
 use std::path::Path;
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use walkdir::DirEntry;
 
 use crate::cli::Opts;
 use crate::config::DepPattern;
+use crate::service::ReferenceFinder;
 
-use super::{LanguageAnalyzer, read_lines};
-
-const SCAN_MAX_LINES: usize = 200;
+use super::LanguageAnalyzer;
 
 pub(super) struct JustfileAnalyzer {}
 
@@ -25,59 +23,24 @@ impl LanguageAnalyzer for JustfileAnalyzer {
         _opts: &Opts,
     ) -> Result<Vec<DepPattern>> {
         let mut dependencies = Vec::new();
-        let mut found = HashSet::new();
 
         for entry in entries {
-            dependencies.extend(extract_imports(entry.path(), &mut found)?);
+            dependencies.extend(extract_imports(entry.path())?);
         }
 
         Ok(dependencies)
     }
 }
 
-fn extract_imports<P>(path: P, found: &mut HashSet<String>) -> Result<Vec<DepPattern>>
+fn extract_imports<P>(path: P) -> Result<Vec<DepPattern>>
 where
     P: AsRef<Path>,
 {
-    let mut scanned_lines = 0usize;
-    let mut imports = Vec::new();
+    let mut finder = ReferenceFinder::new();
 
-    let self_path = path
-        .as_ref()
-        .to_str()
-        .ok_or_else(|| anyhow!("cannot determine justfile path"))?
-        .to_string();
-
-    // check for cyclic dependencies
-    if !found.insert(self_path) {
-        return Ok(imports);
-    }
-
-    let parent = path
-        .as_ref()
-        .parent()
-        .ok_or_else(|| anyhow!("cannot determine parent directory"))?;
-
-    // ignore non-existing imports
-    if !path.as_ref().is_file() {
-        return Ok(imports);
-    }
-
-    let lines = read_lines(&path)?.map_while(Result::ok);
-
-    for line in lines {
-        scanned_lines += 1;
-        if scanned_lines > SCAN_MAX_LINES {
-            break;
-        }
-
-        if let Some(import) = extract_from_line(&line, parent) {
-            imports.extend(extract_imports(&import, found)?);
-            imports.push(import);
-        }
-    }
-
-    Ok(imports)
+    finder.extract_from(path, &|line, parent_dir| {
+        extract_from_line(&line, parent_dir)
+    })
 }
 
 fn extract_from_line(line: &str, dir: &Path) -> Option<DepPattern> {

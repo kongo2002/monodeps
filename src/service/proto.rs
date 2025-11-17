@@ -8,9 +8,7 @@ use crate::cli::Opts;
 use crate::config::DepPattern;
 use crate::path::PathInfo;
 
-use super::{LanguageAnalyzer, non_hidden_files, read_lines};
-
-const SCAN_MAX_LINES: usize = 200;
+use super::{LanguageAnalyzer, ReferenceFinder, non_hidden_files};
 
 pub(super) struct ProtoAnalyzer {
     root: PathInfo,
@@ -60,23 +58,11 @@ fn extract_proto_imports<P>(path: P, proto_candidates: &[PathInfo]) -> Result<Ve
 where
     P: AsRef<Path>,
 {
-    let mut scanned_lines = 0usize;
-    let mut imports = Vec::new();
+    let mut finder = ReferenceFinder::new();
 
-    let lines = read_lines(path)?.map_while(Result::ok);
-
-    for line in lines {
-        scanned_lines += 1;
-        if scanned_lines > SCAN_MAX_LINES {
-            break;
-        }
-
-        if let Some(import) = extract_from_line(&line, proto_candidates) {
-            imports.push(import);
-        }
-    }
-
-    Ok(imports)
+    finder.extract_from(path, &|line, _parent| {
+        extract_from_line(&line, proto_candidates)
+    })
 }
 
 fn extract_from_line(line: &str, proto_candidates: &[PathInfo]) -> Option<DepPattern> {
@@ -89,7 +75,6 @@ fn extract_from_line(line: &str, proto_candidates: &[PathInfo]) -> Option<DepPat
         return None;
     }
 
-    // TODO: support transitive dependencies
     let referenced_import = proto_candidates
         .iter()
         .find(|proto| proto.canonicalized.ends_with(parts[1]))?;
