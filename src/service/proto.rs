@@ -79,7 +79,7 @@ fn extract_from_line(line: &str, proto_candidates: &[PathInfo]) -> Option<DepPat
         .iter()
         .find(|proto| proto.canonicalized.ends_with(parts[1]))?;
 
-    DepPattern::new(
+    DepPattern::plain(
         &referenced_import.canonicalized,
         &referenced_import.canonicalized,
     )

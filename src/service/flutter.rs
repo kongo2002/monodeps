@@ -91,7 +91,7 @@ fn find_local_dependencies(dependencies: &Yaml, pubspec_dir: &PathBuf) -> Option
     for (_, value) in vs.iter() {
         if let Some(dep) = value["path"]
             .as_str()
-            .and_then(|path| DepPattern::new(path, pubspec_dir).ok())
+            .and_then(|path| DepPattern::plain(path, pubspec_dir).ok())
         {
             collected.push(dep);
         }
@@ -106,14 +106,14 @@ fn try_parse_workspace_pubspec(root: &PathInfo) -> Option<Workspace> {
     let references = yaml_str_list(&yaml["workspace"]);
     let workspaces: Vec<_> = references
         .into_iter()
-        .flat_map(|reference| DepPattern::new(&reference, &root.canonicalized))
+        .flat_map(|reference| DepPattern::plain(&reference, &root.canonicalized))
         .collect();
 
     if workspaces.is_empty() {
         None
     } else {
-        let yaml = DepPattern::new("pubspec.yaml", &root.canonicalized).ok()?;
-        let lockfile = DepPattern::new("pubspec.lock", &root.canonicalized).ok()?;
+        let yaml = DepPattern::plain("pubspec.yaml", &root.canonicalized).ok()?;
+        let lockfile = DepPattern::plain("pubspec.lock", &root.canonicalized).ok()?;
         let dependencies = vec![yaml, lockfile];
 
         Some(Workspace { dependencies })

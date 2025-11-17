@@ -115,7 +115,7 @@ where
     let mut dependencies = Vec::new();
 
     // we have to add the kustomization file itself too
-    dependencies.push(DepPattern::new(&path, &base_dir)?);
+    dependencies.push(DepPattern::plain(&path, &base_dir)?);
 
     for resource in all_references {
         let resource_path = kustomization_dir.join(resource);
@@ -123,7 +123,7 @@ where
         if let Ok(metadata) = resource_path.metadata() {
             if metadata.is_file() {
                 // the reference is a file -> keep as "direct" dependency
-                let pattern = DepPattern::new(resource_path, &base_dir)?;
+                let pattern = DepPattern::plain(resource_path, &base_dir)?;
 
                 dependencies.push(pattern);
             } else if metadata.is_dir() {

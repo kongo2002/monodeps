@@ -90,7 +90,7 @@ where
         if !from_package_json.name.is_empty() {
             let parent = parent_dir(entry.path())
                 .ok_or_else(|| anyhow!("cannot determine package.json directory"))?;
-            let pattern = DepPattern::new(parent, &root)?;
+            let pattern = DepPattern::plain(parent, &root)?;
 
             packages.insert(from_package_json.name, pattern);
         }

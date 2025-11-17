@@ -96,6 +96,16 @@ impl DepPattern {
         Ok(Self { raw, pattern })
     }
 
+    pub fn plain<P, R>(dependency: P, root_dir: R) -> Result<Self>
+    where
+        P: AsRef<Path>,
+        R: AsRef<Path>,
+    {
+        let raw = PathInfo::new(dependency, root_dir)?;
+
+        Ok(Self { raw, pattern: None })
+    }
+
     pub fn is_match(&self, path: &str) -> bool {
         match &self.pattern {
             Some(patt) => patt.is_match(path),

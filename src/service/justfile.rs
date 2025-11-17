@@ -53,7 +53,7 @@ fn extract_from_line(line: &str, dir: &Path) -> Option<DepPattern> {
         return None;
     }
 
-    DepPattern::new(parts[1], dir).ok()
+    DepPattern::plain(parts[1], dir).ok()
 }
 
 #[cfg(test)]

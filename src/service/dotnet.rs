@@ -111,7 +111,7 @@ impl DotnetAnalyzer {
                     .find(|(dir_file, dir)| *dir_file == directory && *dir == parent_dir);
 
                 if let Some((dir_file, directory_path)) = exists {
-                    collected.push(DepPattern::new(
+                    collected.push(DepPattern::plain(
                         directory_path.join(dir_file.filename()),
                         dir,
                     )?);
@@ -190,7 +190,7 @@ impl LanguageAnalyzer for DotnetAnalyzer {
 
             collected_imports.extend(imports.into_iter().flat_map(|import| {
                 parent_dir(entry.path())
-                    .and_then(|project_dir| DepPattern::new(&import, &project_dir).ok())
+                    .and_then(|project_dir| DepPattern::plain(&import, &project_dir).ok())
             }));
         }
 

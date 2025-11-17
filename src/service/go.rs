@@ -33,7 +33,7 @@ impl LanguageAnalyzer for GoAnalyzer {
 
         Ok(collected_imports
             .into_iter()
-            .flat_map(|import| DepPattern::new(&import, &config.target.canonicalized))
+            .flat_map(|import| DepPattern::plain(&import, &config.target.canonicalized))
             .collect())
     }
 }
