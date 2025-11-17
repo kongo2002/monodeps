@@ -169,7 +169,7 @@ impl Analyzer {
 fn language_analyzer(language: Language, opts: &Opts) -> Option<Box<dyn LanguageAnalyzer>> {
     match language {
         Language::Golang => Some(Box::new(GoAnalyzer {})),
-        Language::Dotnet => match DotnetAnalyzer::new() {
+        Language::Dotnet => match DotnetAnalyzer::new(opts.target.clone()) {
             Ok(a) => Some(Box::new(a)),
             Err(err) => {
                 log::warn!("failed to initialize dependency analyzer for .NET: {err}");
@@ -533,6 +533,27 @@ impl ReferenceFinder {
 fn parent_dir(filename: &Path) -> Option<PathBuf> {
     let path = PathBuf::from(filename);
     path.ancestors().nth(1).map(|x| x.to_owned())
+}
+
+fn parents_until_root<P>(dir: P, root_dir: &PathInfo) -> Vec<PathBuf>
+where
+    P: AsRef<Path>,
+{
+    let mut parents = Vec::new();
+
+    for path in dir.as_ref().ancestors() {
+        parents.push(path.to_path_buf());
+
+        if path
+            .to_str()
+            .map(|str_path| str_path.eq(&root_dir.canonicalized))
+            .unwrap_or(true)
+        {
+            break;
+        }
+    }
+
+    parents
 }
 
 fn map_depsfile(filename: &str, opts: &Opts) -> Option<DepsfileType> {

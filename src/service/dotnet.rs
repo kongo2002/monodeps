@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 use anyhow::{Result, anyhow};
 use sxd_xpath::{Context, Factory, XPath};
@@ -6,9 +7,33 @@ use walkdir::DirEntry;
 
 use crate::cli::Opts;
 use crate::config::DepPattern;
+use crate::path::PathInfo;
 use crate::service::parent_dir;
 
-use super::LanguageAnalyzer;
+use super::{LanguageAnalyzer, non_hidden_files, parents_until_root};
+
+const DIRECTORY_FILES: [DirectoryFile; 3] = [
+    DirectoryFile::BuildProps,
+    DirectoryFile::BuildTargets,
+    DirectoryFile::PackagesProps,
+];
+
+#[derive(Clone, PartialEq, Debug)]
+enum DirectoryFile {
+    BuildProps,
+    BuildTargets,
+    PackagesProps,
+}
+
+impl DirectoryFile {
+    fn filename(&self) -> &str {
+        match self {
+            DirectoryFile::BuildProps => "Directory.Build.props",
+            DirectoryFile::BuildTargets => "Directory.Build.targets",
+            DirectoryFile::PackagesProps => "Directory.Packages.props",
+        }
+    }
+}
 
 struct Import {
     service_dir: String,
@@ -16,17 +41,29 @@ struct Import {
 }
 
 pub(super) struct DotnetAnalyzer {
+    root: PathInfo,
     proj_refs: XPath,
+    directory_files: OnceLock<Vec<(DirectoryFile, PathBuf)>>,
 }
 
 impl DotnetAnalyzer {
-    pub fn new() -> Result<Self> {
+    pub fn new(root: PathInfo) -> Result<Self> {
         let factory = Factory::new();
         let proj_refs = factory
             .build("//ProjectReference[@Include]/@Include")?
             .ok_or(anyhow!("failed to construct XML selector"))?;
+        let directory_files = OnceLock::new();
 
-        Ok(Self { proj_refs })
+        Ok(Self {
+            root,
+            proj_refs,
+            directory_files,
+        })
+    }
+
+    fn directory_files(&self) -> &Vec<(DirectoryFile, PathBuf)> {
+        self.directory_files
+            .get_or_init(|| try_find_all_directory_files(&self.root.canonicalized))
     }
 
     fn extract_project_references(
@@ -58,6 +95,67 @@ impl DotnetAnalyzer {
             _ => vec![],
         })
     }
+
+    fn collect_directory_file_dependencies(
+        &self,
+        dir: &str,
+        opts: &Opts,
+    ) -> Result<Vec<DepPattern>> {
+        let mut collected = Vec::new();
+        let dir_files = self.directory_files();
+
+        for directory in DIRECTORY_FILES {
+            for parent_dir in parents_until_root(dir, &opts.target) {
+                let exists = dir_files
+                    .iter()
+                    .find(|(dir_file, dir)| *dir_file == directory && *dir == parent_dir);
+
+                if let Some((dir_file, directory_path)) = exists {
+                    collected.push(DepPattern::new(
+                        directory_path.join(dir_file.filename()),
+                        dir,
+                    )?);
+
+                    // we take the first match that is closest to the service's directory
+                    break;
+                }
+            }
+        }
+
+        Ok(collected)
+    }
+}
+
+fn try_find_all_directory_files(root_dir: &str) -> Vec<(DirectoryFile, PathBuf)> {
+    find_all_directory_files(root_dir).unwrap_or_else(|_| Vec::new())
+}
+
+fn find_all_directory_files(root_dir: &str) -> Result<Vec<(DirectoryFile, PathBuf)>> {
+    let mut proto_files = Vec::new();
+
+    for entry in non_hidden_files(root_dir) {
+        if let Some(found) = to_directory_file(&entry) {
+            proto_files.push(found);
+        }
+    }
+
+    Ok(proto_files)
+}
+
+fn to_directory_file(entry: &DirEntry) -> Option<(DirectoryFile, PathBuf)> {
+    let filename = entry.file_name();
+
+    DIRECTORY_FILES
+        .iter()
+        .flat_map(|file| {
+            if filename.eq(file.filename()) {
+                let directory = parent_dir(entry.path())?;
+                Some((file.clone(), directory))
+            } else {
+                None
+            }
+        })
+        .next()
 }
 
 impl LanguageAnalyzer for DotnetAnalyzer {
@@ -68,7 +166,7 @@ impl LanguageAnalyzer for DotnetAnalyzer {
     fn dependencies(
         &self,
         entries: Vec<DirEntry>,
-        _dir: &str,
+        dir: &str,
         opts: &Opts,
     ) -> Result<Vec<DepPattern>> {
         let mut collected_imports = Vec::new();
@@ -95,6 +193,8 @@ impl LanguageAnalyzer for DotnetAnalyzer {
                     .and_then(|project_dir| DepPattern::new(&import, &project_dir).ok())
             }));
         }
+
+        collected_imports.extend(self.collect_directory_file_dependencies(dir, opts)?);
 
         Ok(collected_imports)
     }
@@ -126,6 +226,8 @@ fn extract_project_dir(include: &str) -> Option<Import> {
 
 #[cfg(test)]
 mod tests {
+    use crate::path::PathInfo;
+
     use super::DotnetAnalyzer;
 
     const CSPROJ01: &str = include_str!("../../tests/resources/dotnet_proj01.csproj");
@@ -133,7 +235,8 @@ mod tests {
     #[test]
     fn extract_references() {
         let namespaces = vec![];
-        let analyzer = DotnetAnalyzer::new().unwrap();
+        let root = PathInfo::new(".", ".").unwrap();
+        let analyzer = DotnetAnalyzer::new(root).unwrap();
         let mut extracted = analyzer
             .extract_project_references(CSPROJ01, &namespaces)
             .unwrap();
@@ -153,8 +256,9 @@ mod tests {
 
     #[test]
     fn filter_references_by_namespaces() {
+        let root = PathInfo::new(".", ".").unwrap();
         let namespaces = vec![String::from("Common.Logging")];
-        let analyzer = DotnetAnalyzer::new().unwrap();
+        let analyzer = DotnetAnalyzer::new(root).unwrap();
         let mut extracted = analyzer
             .extract_project_references(CSPROJ01, &namespaces)
             .unwrap();
