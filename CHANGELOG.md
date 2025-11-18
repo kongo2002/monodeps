@@ -1,6 +1,18 @@
 # Changelog
 
 
+## 1.3.0
+
+2025-11-18
+
+- feature: add justfile support
+- improvement: support directory configuration files in .NET (e.g.
+  `Directory.Build.props`)
+- improvement: more accurate peer dependency resolving
+- improvement: reduce filesystem operations during service discovery
+- internal: upgrade dependencies
+
+
 ## 1.2.1
 
 2025-11-11
