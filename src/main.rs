@@ -14,9 +14,12 @@ mod path;
 mod service;
 mod utils;
 
+/// Main process entrypoint
 fn main() {
+    // parse CLI arguments
     let (operation, opts) = bail_out(Opts::parse());
 
+    // by default we write all WARN logs on stderr (no timestamp or logger name)
     env_logger::Builder::from_env(Env::default().default_filter_or("warn"))
         .format_timestamp(None)
         .format_target(false)
@@ -28,6 +31,28 @@ fn main() {
     }
 }
 
+/// Run the 'dependencies' (default) operation of monodeps.
+///
+/// It will discover all services in the given target directory and determine
+/// all dependencies based on the files given via STDIN.
+fn dependencies(opts: Opts) {
+    let changed_files = bail_out(collect_changed_files());
+
+    match service::Service::discover(&opts)
+        .and_then(|services| dependency::resolve(services, changed_files, &opts))
+    {
+        Ok(svs) => output(svs, &opts),
+        Err(err) => {
+            eprintln!("failed to resolve dependencies: {err}");
+            std::process::exit(1)
+        }
+    }
+}
+
+/// Run the 'validate' operation of monodeps.
+///
+/// It will discover a service in the given target directory and determine all services, folder and
+/// files that service is depending on.
 fn validate(service_path: &str, opts: Opts) {
     match service::Service::try_determine(service_path, &opts) {
         Ok(svc) => {
@@ -54,20 +79,10 @@ fn validate(service_path: &str, opts: Opts) {
     }
 }
 
-fn dependencies(opts: Opts) {
-    let changed_files = bail_out(collect_changed_files());
-
-    match service::Service::discover(&opts)
-        .and_then(|services| dependency::resolve(services, changed_files, &opts))
-    {
-        Ok(svs) => output(svs, &opts),
-        Err(err) => {
-            eprintln!("failed to resolve dependencies: {err}");
-            std::process::exit(1)
-        }
-    }
-}
-
+/// Output the determined list of services to STDOUT.
+///
+/// Depending on the specified `OutputFormat` the output will be formatted in either plaintext,
+/// JSON or YAML.
 fn output(services: Vec<Service>, opts: &Opts) {
     match opts.output {
         OutputFormat::Plain => {
@@ -102,6 +117,8 @@ fn output(services: Vec<Service>, opts: &Opts) {
     }
 }
 
+/// Depending on the specified `--relative` option, we output either the full (canonicalized) or
+/// relative path.
 fn service_loc<'a>(service: &'a Service, opts: &Opts) -> Cow<'a, str> {
     if opts.relative {
         Cow::from(service.path.relative_to(&opts.target))
@@ -110,6 +127,10 @@ fn service_loc<'a>(service: &'a Service, opts: &Opts) -> Cow<'a, str> {
     }
 }
 
+/// Print the plaintext output of the given list of services.
+///
+/// If specified via the `--verbose` flag, the output will include the `BuildTrigger` (source) of
+/// the dependency.
 fn print_services<W>(mut w: W, services: Vec<Service>, opts: &Opts)
 where
     W: std::io::Write,
@@ -130,6 +151,7 @@ where
     }
 }
 
+/// Write any error to STDERR and exit with return code 1.
 fn bail_out<T>(result: Result<T>) -> T {
     match result {
         Ok(inner) => inner,
@@ -140,6 +162,7 @@ fn bail_out<T>(result: Result<T>) -> T {
     }
 }
 
+/// Read the input of changed files from STDIN, expecting one file path per line.
 fn collect_changed_files() -> Result<Vec<String>> {
     let mut all = Vec::new();
 
