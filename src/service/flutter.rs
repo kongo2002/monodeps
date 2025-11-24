@@ -78,10 +78,48 @@ impl LanguageAnalyzer for FlutterAnalyzer {
                 find_local_dependencies(&yaml["dev_dependencies"], &pubspec_dir)
                     .unwrap_or_default(),
             );
+
+            // fonts
+            dependencies.extend(find_fonts(&yaml["fonts"], &pubspec_dir).unwrap_or_default());
+
+            // assets
+            dependencies
+                .extend(find_assets(&yaml["flutter"]["assets"], &pubspec_dir).unwrap_or_default());
         }
 
         Ok(dependencies)
     }
+}
+
+fn find_assets(assets: &Yaml, pubspec_dir: &PathBuf) -> Option<Vec<DepPattern>> {
+    Some(
+        assets
+            .as_vec()?
+            .iter()
+            .flat_map(|asset| DepPattern::plain(asset.as_str()?, pubspec_dir).ok())
+            .collect(),
+    )
+}
+
+fn find_fonts(fonts: &Yaml, pubspec_dir: &PathBuf) -> Option<Vec<DepPattern>> {
+    let mut assets = Vec::new();
+    let font_families = fonts.as_vec()?;
+
+    for family in font_families {
+        let family_fonts = family["fonts"].as_vec()?;
+
+        for font_path in family_fonts {
+            let asset = font_path["asset"].as_str()?;
+            assets.push(asset);
+        }
+    }
+
+    Some(
+        assets
+            .into_iter()
+            .flat_map(|asset| DepPattern::plain(asset, pubspec_dir).ok())
+            .collect(),
+    )
 }
 
 fn find_local_dependencies(dependencies: &Yaml, pubspec_dir: &PathBuf) -> Option<Vec<DepPattern>> {

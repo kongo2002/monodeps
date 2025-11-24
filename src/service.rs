@@ -870,6 +870,51 @@ mod tests {
     }
 
     #[test]
+    fn resolve_dependencies_flutter_assets() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let all_opts = Opts {
+            supported_roots: vec![DepsfileType::Makefile],
+            ..opts
+        };
+        let services = Service::discover(&all_opts)?;
+
+        // 2 Depsfile + 2 Makefile
+        assert_eq!(4, services.len());
+
+        // check for the '../directory' dependency from flutter assets
+        let asset_deps = dependency::resolve(services, vec!["directory".to_string()], &all_opts)?;
+
+        // - service-b
+        assert_eq!(1, asset_deps.len());
+        expect_output(asset_deps, vec!["service-b"])?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_dependencies_flutter_fonts() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let all_opts = Opts {
+            supported_roots: vec![DepsfileType::Makefile],
+            ..opts
+        };
+        let services = Service::discover(&all_opts)?;
+
+        // 2 Depsfile + 2 Makefile
+        assert_eq!(4, services.len());
+
+        // check for the '../fonts/Raleway.ttf' dependency from custom fonts
+        let font_deps =
+            dependency::resolve(services, vec!["fonts/Raleway.ttf".to_string()], &all_opts)?;
+
+        // - service-b
+        assert_eq!(1, font_deps.len());
+        expect_output(font_deps, vec!["service-b"])?;
+
+        Ok(())
+    }
+
+    #[test]
     fn resolve_dependencies_shared() -> Result<()> {
         let opts = mk_opts("./tests/examples/full")?;
         let all_opts = Opts {
