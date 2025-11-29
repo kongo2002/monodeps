@@ -76,6 +76,11 @@ pub struct DepPattern {
 }
 
 impl DepPattern {
+    /// Creates a new `DepPattern` given the `dependency` path (often a relative path) and the
+    /// `root_dir`, the `dependency` is relative to. The `dependency` however can also be a
+    /// glob pattern. This function tries to determine which one it is.
+    ///
+    /// In case it cannot be a glob pattern, consider using `DepPattern::plain` instead.
     pub fn new<P, R>(dependency: P, root_dir: R) -> Result<Self>
     where
         P: AsRef<Path>,
@@ -96,6 +101,10 @@ impl DepPattern {
         Ok(Self { raw, pattern })
     }
 
+    /// Creates a new `DepPattern` given the `dependency` path (often a relative path) and the
+    /// `root_dir`, the `dependency` is relative to.
+    ///
+    /// This function only supports real file paths and not glob patterns.
     pub fn plain<P, R>(dependency: P, root_dir: R) -> Result<Self>
     where
         P: AsRef<Path>,
