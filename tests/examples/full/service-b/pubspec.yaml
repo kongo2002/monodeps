@@ -2,6 +2,10 @@ dependencies:
   - shared_code:
       path: ../shared
 
+dependency_overrides:
+  some_lib:
+    path: ../libs/some_lib
+
 flutter:
   assets:
     - ../directory/

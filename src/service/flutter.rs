@@ -79,6 +79,12 @@ impl LanguageAnalyzer for FlutterAnalyzer {
                     .unwrap_or_default(),
             );
 
+            // dependency overrides
+            dependencies.extend(
+                find_local_dependencies(&yaml["dependency_overrides"], &pubspec_dir)
+                    .unwrap_or_default(),
+            );
+
             // fonts
             dependencies.extend(find_fonts(&yaml["fonts"], &pubspec_dir).unwrap_or_default());
 

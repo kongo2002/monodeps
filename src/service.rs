@@ -870,6 +870,32 @@ mod tests {
     }
 
     #[test]
+    fn resolve_dependencies_flutter_dependency_overrides() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let all_opts = Opts {
+            supported_roots: vec![DepsfileType::Makefile],
+            ..opts
+        };
+        let services = Service::discover(&all_opts)?;
+
+        // 2 Depsfile + 2 Makefile
+        assert_eq!(4, services.len());
+
+        // check for the '../libs/some_lib' dependency from the dependency overrides
+        let asset_deps = dependency::resolve(
+            services,
+            vec!["libs/some_lib/something.dart".to_string()],
+            &all_opts,
+        )?;
+
+        // - service-b
+        assert_eq!(1, asset_deps.len());
+        expect_output(asset_deps, vec!["service-b"])?;
+
+        Ok(())
+    }
+
+    #[test]
     fn resolve_dependencies_flutter_assets() -> Result<()> {
         let opts = mk_opts("./tests/examples/full")?;
         let all_opts = Opts {
