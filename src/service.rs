@@ -863,8 +863,6 @@ mod tests {
         // - file-does-not-exist
         assert_eq!(5, service_e.auto_dependencies.len());
 
-        dbg!(&service_e);
-
         contains_auto_deps(
             &service_e,
             &vec![

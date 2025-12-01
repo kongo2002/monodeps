@@ -66,13 +66,12 @@ fn extract_from_submodule(line: &str, dir: &Path) -> Option<DepPattern> {
 
             // these are all the justfile variants the submodule could refer to
             // we pick the first one that exists
-            let candidates = vec![
+            let candidates = [
                 format!("./{module_name}.just"),
                 format!("./{module_name}/mod.just"),
                 format!("./{module_name}/justfile"),
                 format!("./{module_name}/.justfile"),
             ];
-            dbg!(dir, &candidates);
             candidates
                 .iter()
                 .flat_map(|justfile| {
