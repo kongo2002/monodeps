@@ -65,6 +65,7 @@ impl Config {
             Language::JavaScript => true,
             Language::Protobuf => true,
             Language::Justfile => true,
+            Language::Makefile => true,
         }
     }
 }
@@ -182,6 +183,7 @@ pub enum Language {
     JavaScript,
     Protobuf,
     Justfile,
+    Makefile,
 }
 
 impl Display for Language {
@@ -194,6 +196,7 @@ impl Display for Language {
             Language::JavaScript => f.write_str("javascript"),
             Language::Protobuf => f.write_str("proto"),
             Language::Justfile => f.write_str("justfile"),
+            Language::Makefile => f.write_str("makefile"),
         }
     }
 }
@@ -205,14 +208,12 @@ impl TryFrom<&str> for Language {
         match value {
             "go" => Ok(Language::Golang),
             "golang" => Ok(Language::Golang),
-            "dotnet" => Ok(Language::Dotnet),
-            "csharp" => Ok(Language::Dotnet),
-            "dart" => Ok(Language::Flutter),
-            "flutter" => Ok(Language::Flutter),
+            "dotnet" | "csharp" => Ok(Language::Dotnet),
+            "dart" | "flutter" => Ok(Language::Flutter),
             "kustomize" => Ok(Language::Kustomize),
-            "js" => Ok(Language::JavaScript),
-            "javascript" => Ok(Language::JavaScript),
+            "js" | "javascript" => Ok(Language::JavaScript),
             "proto" => Ok(Language::Protobuf),
+            "make" | "makefile" => Ok(Language::Makefile),
             unknown => Err(format!("unknown language: {}", unknown)),
         }
     }

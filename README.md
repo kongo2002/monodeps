@@ -43,6 +43,7 @@ As of now, the following languages/frameworks are supported:
 - Justfile
 - Protobuf
 - Javascript
+- Makefile
 
 By default, *monodeps* will try to auto-detect the mentioned language/frameworks
 based on the present files and file types. Once detected, the language specific

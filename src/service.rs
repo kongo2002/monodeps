@@ -18,6 +18,7 @@ use self::go::GoAnalyzer;
 use self::javascript::JavaScriptAnalyzer;
 use self::justfile::JustfileAnalyzer;
 use self::kustomize::KustomizeAnalyzer;
+use self::makefile::MakefileAnalyzer;
 use self::proto::ProtoAnalyzer;
 
 mod dotnet;
@@ -26,6 +27,7 @@ mod go;
 mod javascript;
 mod justfile;
 mod kustomize;
+mod makefile;
 mod proto;
 
 const SCAN_MAX_LINES: usize = 300;
@@ -80,7 +82,7 @@ trait LanguageAnalyzer {
 
     /// Predicate to determine whether the given file name may be relevant for the
     /// `LanguageAnalyzer`. Will be potentially invoked for every file in the service directory,
-    /// before the actual auto-discovery is triggered.
+    /// before the actual auto-discovery is triggered. The passed `file_name` is lowercased.
     fn file_relevant(&self, file_name: &str) -> bool;
 }
 
@@ -100,6 +102,7 @@ impl Analyzer {
             Language::JavaScript,
             Language::Protobuf,
             Language::Justfile,
+            Language::Makefile,
         ];
 
         // collect all language analyzers that are properly configured and enabled
@@ -200,6 +203,13 @@ fn language_analyzer(language: Language, opts: &Opts) -> Option<Box<dyn Language
         Language::JavaScript => Some(Box::new(JavaScriptAnalyzer::new(opts.target.clone()))),
         Language::Protobuf => Some(Box::new(ProtoAnalyzer::new(opts.target.clone()))),
         Language::Justfile => Some(Box::new(JustfileAnalyzer {})),
+        Language::Makefile => match MakefileAnalyzer::new() {
+            Ok(a) => Some(Box::new(a)),
+            Err(err) => {
+                log::warn!("failed to initialize dependency analyzer for Makefile: {err}");
+                None
+            }
+        },
     }
 }
 
@@ -474,6 +484,10 @@ fn try_determine_language(entry: &DirEntry) -> Option<LanguageMatch> {
             language: Language::Justfile,
             score: 5,
         }),
+        "Makefile" => Some(LanguageMatch {
+            language: Language::Makefile,
+            score: 5,
+        }),
         _ => None,
     }
 }
@@ -511,10 +525,11 @@ impl ReferenceFinder {
         }
     }
 
-    fn extract_from<P, F>(&mut self, path: P, extractor: &F) -> Result<Vec<DepPattern>>
+    fn extract_from<P, I, F>(&mut self, path: P, extractor: &F) -> Result<Vec<DepPattern>>
     where
         P: AsRef<Path>,
-        F: Fn(String, &Path) -> Option<DepPattern>,
+        I: IntoIterator<Item = DepPattern>,
+        F: Fn(String, &Path) -> I,
     {
         let mut scanned_lines = 0usize;
         let mut imports = Vec::new();
@@ -555,7 +570,7 @@ impl ReferenceFinder {
                 break;
             }
 
-            if let Some(import) = extractor(line, parent) {
+            for import in extractor(line, parent) {
                 imports.extend(self.extract_from(&import, extractor)?);
                 imports.push(import);
             }
