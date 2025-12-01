@@ -36,9 +36,7 @@ fn extract_imports<P>(path: P) -> Result<Vec<DepPattern>>
 where
     P: AsRef<Path>,
 {
-    let mut finder = ReferenceFinder::new();
-
-    finder.extract_from(path, &|line, parent_dir| {
+    ReferenceFinder::new().extract_from(path, &|line, parent_dir| {
         extract_from_line(&line, parent_dir)
     })
 }

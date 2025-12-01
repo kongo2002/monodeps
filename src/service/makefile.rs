@@ -25,9 +25,7 @@ impl MakefileAnalyzer {
     where
         P: AsRef<Path>,
     {
-        let mut finder = ReferenceFinder::new();
-
-        finder.extract_from(path, &|line, parent_dir| {
+        ReferenceFinder::new().extract_from(path, &|line, parent_dir| {
             self.extract_from_line(&line, parent_dir)
         })
     }

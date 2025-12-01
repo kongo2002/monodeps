@@ -58,9 +58,7 @@ fn extract_proto_imports<P>(path: P, proto_candidates: &[PathInfo]) -> Result<Ve
 where
     P: AsRef<Path>,
 {
-    let mut finder = ReferenceFinder::new();
-
-    finder.extract_from(path, &|line, _parent| {
+    ReferenceFinder::new().extract_from(path, &|line, _parent| {
         extract_from_line(&line, proto_candidates)
     })
 }
