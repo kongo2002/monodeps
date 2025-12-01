@@ -497,7 +497,7 @@ where
         .filter_map(|e| e.ok())
 }
 
-/// Helper structure the recursively find line-based file references in language files (e.g.
+/// Helper structure to recursively find line-based file references in language files (e.g.
 /// "imports" in protobuf or justfiles). The method `extract_from` supports detection of cyclic
 /// dependencies.
 struct ReferenceFinder {
@@ -843,12 +843,22 @@ mod tests {
 
         // - service-f
         // - just/lib.just
+        // - just/module.just
+        // - just/submodule/mod.just
         // - file-does-not-exist
-        assert_eq!(3, service_e.auto_dependencies.len());
+        assert_eq!(5, service_e.auto_dependencies.len());
+
+        dbg!(&service_e);
 
         contains_auto_deps(
             &service_e,
-            &vec!["service-f", "file-does-not-exist", "just/lib.just"],
+            &vec![
+                "service-f",
+                "file-does-not-exist",
+                "just/lib.just",
+                "just/module.just",
+                "just/submodule/mod.just",
+            ],
         );
 
         Ok(())

@@ -5,3 +5,5 @@ import '../service-e/justfile'
 
 # test non existing files
 import '../file-does-not-exist'
+
+mod my-module '../just/module.just'

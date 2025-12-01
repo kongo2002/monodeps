@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use walkdir::DirEntry;
@@ -44,10 +44,53 @@ where
 }
 
 fn extract_from_line(line: &str, dir: &Path) -> Option<DepPattern> {
-    if !line.starts_with("import") {
-        return None;
+    if line.starts_with("import") {
+        extract_from_import(line, dir)
+    } else if line.starts_with("mod") {
+        extract_from_submodule(line, dir)
+    } else {
+        None
     }
+}
 
+fn extract_from_submodule(line: &str, dir: &Path) -> Option<DepPattern> {
+    // first we are looking for a named submodule like `mod something '../some.just'`
+    let parts: Vec<_> = line.splitn(3, "'").collect();
+    if parts.len() == 3 {
+        DepPattern::plain(parts[1], dir).ok()
+    } else {
+        // afterwards we are looking for the submodule shorthand `mod foobar`
+        let mut words: Vec<_> = line.split(" ").collect();
+        if words.len() == 2 {
+            let module_name = words.remove(1);
+
+            // these are all the justfile variants the submodule could refer to
+            // we pick the first one that exists
+            let candidates = vec![
+                format!("./{module_name}.just"),
+                format!("./{module_name}/mod.just"),
+                format!("./{module_name}/justfile"),
+                format!("./{module_name}/.justfile"),
+            ];
+            dbg!(dir, &candidates);
+            candidates
+                .iter()
+                .flat_map(|justfile| {
+                    let path = PathBuf::from(dir).join(justfile);
+                    if path.is_file() {
+                        DepPattern::plain(path, dir).ok()
+                    } else {
+                        None
+                    }
+                })
+                .next()
+        } else {
+            None
+        }
+    }
+}
+
+fn extract_from_import(line: &str, dir: &Path) -> Option<DepPattern> {
     let parts: Vec<_> = line.splitn(3, "'").collect();
     if parts.len() != 3 {
         return None;
