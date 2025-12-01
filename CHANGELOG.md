@@ -1,6 +1,15 @@
 # Changelog
 
 
+## 1.4.0
+
+2025-12-01
+
+- feature: support dependency overrides, font and asset references in flutter
+- feature: support submodules (i.e. `mod`) in justfiles
+- internal: upgrade dependencies
+
+
 ## 1.3.0
 
 2025-11-18
