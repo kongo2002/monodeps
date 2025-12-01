@@ -34,16 +34,19 @@ One of the ideas of *monodeps* is to come with "batteries included" as much as
 as possible. For that purpose, auto discovery of service's dependencies is one
 of the key components.
 
-As of now, the following languages/frameworks are supported:
+As of now, the following languages/frameworks are supported (to a varying degree
+of "accuracy"):
 
-- Go
-- Flutter/Dart
-- C\# (.NET)
-- Kustomize
-- Justfile
-- Protobuf
-- Javascript
-- Makefile
+ | Language     | Support    | Description                                                             |
+ | ---          | ---        | ---                                                                     |
+ | C#           | very good  | full support for `csproj` files and directory configuration             |
+ | Kustomize    | very good  | support for recursively referenced resources                            |
+ | Justfile     | very good  | support for imports and submodules                                      |
+ | Flutter/Dart | very good  | support for fonts, assets, workspaces, local dependencies and overrides |
+ | Go           | good       | regex based, requires common prefix/namespace configuration             |
+ | Protobuf     | good       | regex/prefix based support for imports                                  |
+ | Makefile     | basic      | support for inludes (no variable expansion though)                      |
+ | Javascript   | very basic | workspace support                                                       |
 
 By default, *monodeps* will try to auto-detect the mentioned language/frameworks
 based on the present files and file types. Once detected, the language specific
