@@ -31,8 +31,8 @@ considerably.
 ### Auto discovery
 
 One of the ideas of *monodeps* is to come with "batteries included" as much as
-as possible. For that purpose, auto discovery of service's dependencies is one
-of the key components.
+possible. For that purpose, auto discovery of service's dependencies is one of
+the key components.
 
 As of now, the following languages/frameworks are supported (to a varying degree
 of "accuracy"):
@@ -45,7 +45,7 @@ of "accuracy"):
  | Flutter/Dart | very good  | support for fonts, assets, workspaces, local dependencies and overrides |
  | Go           | good       | regex based, requires common prefix/namespace configuration             |
  | Protobuf     | good       | regex/prefix based support for imports                                  |
- | Makefile     | basic      | support for inludes (no variable expansion though)                      |
+ | Makefile     | basic      | support for includes (no variable expansion though)                     |
  | Javascript   | very basic | workspace support                                                       |
 
 By default, *monodeps* will try to auto-detect the mentioned language/frameworks
@@ -101,7 +101,7 @@ dependencies:
 # service directory.
 #
 # Currently supported: go/golang, csharp/dotnet, dart/flutter, kustomize,
-#                      js/javascript, proto, justfile
+#                      js/javascript, proto, justfile, makefile
 languages:
   - go
 ```
@@ -146,7 +146,7 @@ auto_discovery:
 toolchain:
 
 ```console
-$ cargo build --release
+cargo build --release
 ```
 
 
