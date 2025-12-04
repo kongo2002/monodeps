@@ -7,12 +7,15 @@ on:
     branches: [ master ]
 
 jobs:
-  test:
+  coverage:
     runs-on: ubuntu-24.04
 
     steps:
     - uses: actions/checkout@v5
 
+    - name: Install Tarpaulin
+      run: cargo install cargo-tarpaulin
+
     - name: Run Coverage
-      run: cargo run --release -- tarpaulin --engine llvm --follow-exec --post-test-delay 10 --coveralls ${{ secrets.COVERALLS_REPO_TOKEN }}
+      run: cargo tarpaulin --engine llvm --follow-exec --post-test-delay 10 --coveralls ${{ secrets.COVERALLS_REPO_TOKEN }}
 
