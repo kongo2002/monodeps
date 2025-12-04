@@ -289,8 +289,8 @@ impl Service {
             .into_iter()
             .flat_map(|filename| {
                 let full_path = match filename {
-                    None => PathBuf::from(path),
-                    Some(file) => PathBuf::from(path).join(file),
+                    None => PathBuf::from(root_dir).join(path),
+                    Some(file) => PathBuf::from(root_dir).join(path).join(file),
                 };
                 ServiceContext::from_depsfile(full_path, root_dir, opts)
             })
@@ -743,6 +743,71 @@ mod tests {
                 dep
             );
         }
+    }
+
+    #[test]
+    fn try_determine_does_not_exist() -> Result<()> {
+        let opts = mk_opts(".")?;
+        let discovered = Service::try_determine("justfile", &opts);
+
+        assert_eq!(true, discovered.is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn try_determine_direct_file_target_dir() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let discovered = Service::try_determine("./service-c/Depsfile", &opts);
+
+        assert_eq!(false, discovered.is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn try_determine_without_file_justfile() -> Result<()> {
+        let opts = mk_opts(".")?;
+        let justfile_opts = Opts {
+            supported_roots: vec![DepsfileType::Justfile],
+            ..opts
+        };
+        let discovered = Service::try_determine("./tests/examples/full/service-a", &justfile_opts);
+
+        assert_eq!(false, discovered.is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn try_determine_without_file_justfile_not_configured() -> Result<()> {
+        let opts = mk_opts(".")?;
+        let discovered = Service::try_determine("./tests/examples/full/service-a", &opts);
+
+        // justfiles are not configured -> no service found
+        assert_eq!(true, discovered.is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn try_determine_without_file() -> Result<()> {
+        let opts = mk_opts(".")?;
+        let discovered = Service::try_determine("./tests/examples/full/service-c", &opts);
+
+        assert_eq!(false, discovered.is_err());
+
+        Ok(())
+    }
+
+    #[test]
+    fn try_determine_direct_file() -> Result<()> {
+        let opts = mk_opts(".")?;
+        let discovered = Service::try_determine("./tests/examples/full/service-c/Depsfile", &opts);
+
+        assert_eq!(false, discovered.is_err());
+
+        Ok(())
     }
 
     #[test]

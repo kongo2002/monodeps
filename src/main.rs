@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::io::BufRead;
 
 use self::cli::{Operation, Opts, OutputFormat};
 use self::service::Service;
@@ -26,7 +27,7 @@ fn main() {
         .init();
 
     match operation {
-        Operation::Dependencies => dependencies(opts),
+        Operation::Dependencies => dependencies(std::io::stdin().lock(), opts),
         Operation::Validate(path) => validate(&path, opts),
     }
 }
@@ -35,8 +36,11 @@ fn main() {
 ///
 /// It will discover all services in the given target directory and determine
 /// all dependencies based on the files given via STDIN.
-fn dependencies(opts: Opts) {
-    let changed_files = bail_out(collect_changed_files());
+fn dependencies<R>(reader: R, opts: Opts)
+where
+    R: BufRead,
+{
+    let changed_files = bail_out(collect_changed_files(reader));
 
     match service::Service::discover(&opts)
         .and_then(|services| dependency::resolve(services, changed_files, &opts))
@@ -163,12 +167,92 @@ fn bail_out<T>(result: Result<T>) -> T {
 }
 
 /// Read the input of changed files from STDIN, expecting one file path per line.
-fn collect_changed_files() -> Result<Vec<String>> {
+fn collect_changed_files<R>(reader: R) -> Result<Vec<String>>
+where
+    R: BufRead,
+{
     let mut all = Vec::new();
 
-    for line in std::io::stdin().lines() {
+    for line in reader.lines() {
         all.push(line?);
     }
 
     Ok(all)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use crate::cli::Opts;
+    use crate::config::{AutoDiscoveryConfig, Config, DotnetConfig, GoDepsConfig};
+    use crate::path::PathInfo;
+    use crate::{dependencies, validate};
+
+    fn mk_opts() -> Opts {
+        Opts {
+            target: PathInfo::new("./tests", "").unwrap(),
+            config: Config {
+                auto_discovery: AutoDiscoveryConfig {
+                    go: GoDepsConfig {
+                        package_prefixes: vec![],
+                    },
+                    dotnet: DotnetConfig {
+                        package_namespaces: vec![],
+                    },
+                },
+                global_dependencies: vec![],
+            },
+            output: crate::cli::OutputFormat::Plain,
+            verbose: true,
+            relative: false,
+            supported_roots: vec![],
+        }
+    }
+
+    #[test]
+    fn validate_does_not_fail() {
+        // we just test that is does not fail
+        validate("./examples/full/service-c", mk_opts());
+    }
+
+    #[test]
+    fn test_dependencies() {
+        // we are emulating STDIN
+        let input = String::from("some/file\nanother file\n");
+        let cursor = Cursor::new(input);
+
+        // we just test that is does not fail
+        dependencies(cursor, mk_opts());
+    }
+
+    #[test]
+    fn test_dependencies_json() {
+        // we are emulating STDIN
+        let input = String::from("some/file\nanother file\n");
+        let cursor = Cursor::new(input);
+        let opts = mk_opts();
+        let json_opts = Opts {
+            output: crate::cli::OutputFormat::Json,
+            ..opts
+        };
+
+        // we just test that is does not fail
+        dependencies(cursor, json_opts);
+    }
+
+    #[test]
+    fn test_dependencies_yaml() {
+        // we are emulating STDIN
+        let input = String::from("some/file\nanother file\n");
+        let cursor = Cursor::new(input);
+        let opts = mk_opts();
+        let yaml_opts = Opts {
+            output: crate::cli::OutputFormat::Yaml,
+            ..opts
+        };
+
+        // we just test that is does not fail
+        dependencies(cursor, yaml_opts);
+    }
 }
