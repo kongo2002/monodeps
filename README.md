@@ -1,6 +1,6 @@
 # monodeps
 
-[![monodeps](https://github.com/kongo2002/monodeps/actions/workflows/build.yaml/badge.svg)][actions]
+[![monodeps](https://github.com/kongo2002/monodeps/actions/workflows/build.yaml/badge.svg)][actions] [![Coverage Status](https://coveralls.io/repos/github/kongo2002/monodeps/badge.svg?branch=master)](https://coveralls.io/github/kongo2002/monodeps?branch=master)
 
 monodeps is a tool to help with change detection in mono-repository setups in
 order to determine which services or folders are candidate for build and publish
