@@ -55,12 +55,37 @@ pub fn canonicalize(path: &Path) -> Result<String> {
 mod tests {
     use super::PathInfo;
 
+    use anyhow::Result;
+
     fn absolute(path: &str) -> String {
         std::path::absolute(path)
             .unwrap()
             .to_str()
             .unwrap()
             .to_owned()
+    }
+
+    #[test]
+    fn relative_to_success() -> Result<()> {
+        let root = PathInfo::new(".", ".")?;
+        let path = PathInfo::new("./tests/examples/full", &root.canonicalized)?;
+        let relative = path.relative_to(&root);
+
+        assert_ne!(relative, path.canonicalized);
+        Ok(())
+    }
+
+    #[test]
+    fn relative_to_fallback() -> Result<()> {
+        let root = PathInfo::new(".", ".")?;
+        let tmp = PathInfo::new("something", "/tmp")?;
+        let path = PathInfo::new("./tests/examples/full", &root.canonicalized)?;
+        let relative = path.relative_to(&tmp);
+
+        // `path` is not relative to `tmp`, therefore we expect to simply return
+        // `path.canonicalized` instead
+        assert_eq!(relative, path.canonicalized);
+        Ok(())
     }
 
     #[test]
