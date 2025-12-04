@@ -16,12 +16,6 @@ pub fn resolve(
         .flat_map(|p| PathInfo::new(&p, &opts.target.canonicalized))
         .collect();
 
-    if log::log_enabled!(log::Level::Debug) {
-        for svc in &services {
-            log::debug!("discovered service: {}", svc);
-        }
-    }
-
     // 1. check global dependencies
     // if any changed file matches any global dependency every service will be returned
     for global_dep in opts

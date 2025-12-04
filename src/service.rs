@@ -229,31 +229,6 @@ pub struct AutoDependency {
     pub pattern: DepPattern,
 }
 
-impl Display for Service {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Service{'")?;
-        f.write_str(self.path.canonicalized.as_str())?;
-
-        f.write_str("',dependencies:[")?;
-        for (idx, value) in self.depsfile.dependencies.iter().enumerate() {
-            if idx > 0 {
-                f.write_str(",")?;
-            }
-            f.write_fmt(format_args!("'{}'", value))?;
-        }
-
-        f.write_str("],auto_dependencies:[")?;
-        for (idx, value) in self.auto_dependencies.iter().enumerate() {
-            if idx > 0 {
-                f.write_str(",")?;
-            }
-            f.write_fmt(format_args!("'{}'", value))?;
-        }
-
-        f.write_str("]}")
-    }
-}
-
 impl Display for AutoDependency {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("{} [{}]", self.pattern, self.language))
