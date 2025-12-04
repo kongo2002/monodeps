@@ -1,3 +1,5 @@
+resolution: 'workspace'
+
 dependencies:
   - shared_code:
       path: ../shared
