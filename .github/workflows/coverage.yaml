@@ -1,0 +1,19 @@
+name: Rust
+
+on:
+  push:
+    branches: [ master ]
+
+jobs:
+  coverage:
+    runs-on: ubuntu-24.04
+
+    steps:
+    - uses: actions/checkout@v5
+
+    - name: Install Tarpaulin
+      run: cargo install cargo-tarpaulin
+
+    - name: Run Coverage
+      run: cargo tarpaulin --engine llvm --follow-exec --post-test-delay 10 --coveralls ${{ secrets.COVERALLS_REPO_TOKEN }}
+
