@@ -1,0 +1,6 @@
+{
+    "name": "some_package",
+    "devDependencies": {
+        "vite": "^5.1.3"
+    }
+}
