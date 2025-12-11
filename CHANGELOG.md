@@ -1,6 +1,15 @@
 # Changelog
 
 
+## 1.5.0
+
+2025-12-11
+
+- feature: very basic `Makefile` support
+- feature: support `--all` flag
+- internal: increase test coverage
+
+
 ## 1.4.0
 
 2025-12-01
