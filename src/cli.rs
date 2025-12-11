@@ -22,6 +22,7 @@ pub struct Opts {
     pub output: OutputFormat,
     pub verbose: bool,
     pub relative: bool,
+    pub all: bool,
     pub supported_roots: Vec<DepsfileType>,
 }
 
@@ -44,6 +45,7 @@ impl Opts {
         opts.optflag("", "justfile", "accept 'justfile' as project roots");
         opts.optflag("", "buildfile", "accept 'Buildfile.yaml' as project roots");
         opts.optflag("", "relative", "return relative paths");
+        opts.optflag("", "all", "return all discovered services");
         opts.optflag("v", "verbose", "verbose output");
         opts.optflag("h", "help", "show help");
 
@@ -105,6 +107,7 @@ impl Opts {
         }
 
         let relative = matches.opt_present("relative");
+        let all = matches.opt_present("all");
 
         Ok((
             operation,
@@ -114,6 +117,7 @@ impl Opts {
                 output,
                 verbose,
                 relative,
+                all,
                 supported_roots,
             },
         ))

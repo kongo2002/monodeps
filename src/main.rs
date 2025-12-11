@@ -40,11 +40,16 @@ fn dependencies<R>(reader: R, opts: Opts)
 where
     R: BufRead,
 {
-    let changed_files = bail_out(collect_changed_files(reader));
+    let services = service::Service::discover(&opts);
 
-    match service::Service::discover(&opts)
-        .and_then(|services| dependency::resolve(services, changed_files, &opts))
-    {
+    let result = if !opts.all {
+        let changed_files = bail_out(collect_changed_files(reader));
+        services.and_then(|services| dependency::resolve(services, changed_files, &opts))
+    } else {
+        services
+    };
+
+    match result {
         Ok(svs) => output(svs, &opts),
         Err(err) => {
             eprintln!("failed to resolve dependencies: {err}");
@@ -203,6 +208,7 @@ mod tests {
                 },
                 global_dependencies: vec![],
             },
+            all: false,
             output: crate::cli::OutputFormat::Plain,
             verbose: true,
             relative: false,

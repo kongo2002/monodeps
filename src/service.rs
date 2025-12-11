@@ -696,6 +696,7 @@ mod tests {
             },
             output: crate::cli::OutputFormat::Plain,
             verbose: true,
+            all: false,
             relative: false,
             supported_roots: vec![],
         };
