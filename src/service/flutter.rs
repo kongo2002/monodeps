@@ -150,7 +150,11 @@ fn try_parse_workspace_pubspec(root: &PathInfo) -> Option<Workspace> {
     let references = yaml_str_list(&yaml["workspace"]);
     let workspaces: Vec<_> = references
         .into_iter()
-        .flat_map(|reference| DepPattern::plain(&reference, &root.canonicalized))
+        .flat_map(|reference|
+            // we do *not* use DepPattern::plain here because since Dart 3.11 the workspace
+            // references can be glob patterns too. even we don't use it to determine the
+            // matching workspace _yet_ it's better to do it correctly here already
+            DepPattern::new(&reference, &root.canonicalized))
         .collect();
 
     if workspaces.is_empty() {

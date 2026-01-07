@@ -982,6 +982,28 @@ mod tests {
     }
 
     #[test]
+    fn resolve_dependencies_flutter_workspace() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let all_opts = Opts {
+            supported_roots: vec![DepsfileType::Makefile],
+            ..opts
+        };
+        let services = Service::discover(&all_opts)?;
+
+        // 2 Depsfile + 2 Makefile
+        assert_eq!(4, services.len());
+
+        // check for the workspace 'pubspec.yaml' in the root folder
+        let font_deps = dependency::resolve(services, vec!["pubspec.yaml".to_string()], &all_opts)?;
+
+        // - service-b
+        assert_eq!(1, font_deps.len());
+        expect_output(font_deps, vec!["service-b"])?;
+
+        Ok(())
+    }
+
+    #[test]
     fn resolve_dependencies_flutter_fonts() -> Result<()> {
         let opts = mk_opts("./tests/examples/full")?;
         let all_opts = Opts {
