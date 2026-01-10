@@ -191,7 +191,7 @@ impl Analyzer {
 fn language_analyzer(language: Language, opts: &Opts) -> Option<Box<dyn LanguageAnalyzer>> {
     match language {
         Language::Golang => Some(Box::new(GoAnalyzer {})),
-        Language::Dotnet => match DotnetAnalyzer::new(opts.target.clone()) {
+        Language::Dotnet => match DotnetAnalyzer::new() {
             Ok(a) => Some(Box::new(a)),
             Err(err) => {
                 log::warn!("failed to initialize dependency analyzer for .NET: {err}");
