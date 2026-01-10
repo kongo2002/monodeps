@@ -8,7 +8,7 @@ use crate::cli::Opts;
 use crate::config::DepPattern;
 use crate::path::PathInfo;
 
-use super::{LanguageAnalyzer, ReferenceFinder, non_hidden_files};
+use super::{LanguageAnalyzer, ReferenceLineFinder, non_hidden_files};
 
 pub(super) struct ProtoAnalyzer {
     root: PathInfo,
@@ -58,7 +58,7 @@ fn extract_proto_imports<P>(path: P, proto_candidates: &[PathInfo]) -> Result<Ve
 where
     P: AsRef<Path>,
 {
-    ReferenceFinder::new().extract_from(path, &|line, _parent| {
+    ReferenceLineFinder::new().extract_from(path, &|line, _parent| {
         extract_from_line(&line, proto_candidates)
     })
 }

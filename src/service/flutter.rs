@@ -1,12 +1,12 @@
 use anyhow::Result;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use walkdir::DirEntry;
 use yaml_rust::Yaml;
 
 use crate::cli::Opts;
 use crate::config::DepPattern;
 use crate::path::PathInfo;
-use crate::service::parent_dir;
+use crate::service::{ReferenceFinder, parent_dir};
 use crate::utils::{load_yaml, yaml_str_list};
 
 use super::LanguageAnalyzer;
@@ -25,11 +25,52 @@ impl FlutterAnalyzer {
 
         Self { workspace }
     }
+
+    fn analyze_pubspec(&self, yaml: &Yaml, pubspec_dir: &PathBuf) -> Vec<DepPattern> {
+        let mut dependencies = Vec::new();
+
+        if let Some(workspace) = &self.workspace {
+            let is_part_of_workspace = yaml["resolution"]
+                .as_str()
+                .map(|resolution| resolution.eq_ignore_ascii_case("workspace"))
+                .unwrap_or(false);
+
+            // we could also check if the package is _really_ listed in the workspaces
+            // but usually that would fail the dependency resolution anyways
+            if is_part_of_workspace {
+                dependencies.extend(workspace.dependencies.clone());
+            }
+        }
+
+        // regular lib dependencies
+        dependencies.extend(
+            find_local_dependencies(&yaml["dependencies"], pubspec_dir).unwrap_or_default(),
+        );
+
+        // development dependencies
+        dependencies.extend(
+            find_local_dependencies(&yaml["dev_dependencies"], pubspec_dir).unwrap_or_default(),
+        );
+
+        // dependency overrides
+        dependencies.extend(
+            find_local_dependencies(&yaml["dependency_overrides"], pubspec_dir).unwrap_or_default(),
+        );
+
+        // fonts
+        dependencies.extend(find_fonts(&yaml["fonts"], pubspec_dir).unwrap_or_default());
+
+        // assets
+        dependencies
+            .extend(find_assets(&yaml["flutter"]["assets"], pubspec_dir).unwrap_or_default());
+
+        dependencies
+    }
 }
 
 impl LanguageAnalyzer for FlutterAnalyzer {
     fn file_relevant(&self, file_name: &str) -> bool {
-        file_name == "pubspec.yaml"
+        file_name == "pubspec.yaml" || file_name == "analysis_options.yaml"
     }
 
     fn dependencies(
@@ -41,60 +82,66 @@ impl LanguageAnalyzer for FlutterAnalyzer {
         let mut dependencies = Vec::new();
 
         for entry in entries {
-            let pubspec_dir = match parent_dir(entry.path()) {
-                Some(d) => d,
-                None => continue,
-            };
+            // pubspec.yaml
+            if entry
+                .file_name()
+                .to_str()
+                .map(|file_name| file_name.eq_ignore_ascii_case("pubspec.yaml"))
+                .unwrap_or(false)
+            {
+                let pubspec_dir = match parent_dir(entry.path()) {
+                    Some(d) => d,
+                    None => continue,
+                };
 
-            if log::log_enabled!(log::Level::Debug) {
-                log::debug!(
-                    "flutter: analyzing dart pubspec file '{}'",
-                    entry.path().display()
-                );
-            }
-
-            let yaml = load_yaml(entry.path())?;
-
-            if let Some(workspace) = &self.workspace {
-                let is_part_of_workspace = yaml["resolution"]
-                    .as_str()
-                    .map(|resolution| resolution.eq_ignore_ascii_case("workspace"))
-                    .unwrap_or(false);
-
-                // we could also check if the package is _really_ listed in the workspaces
-                // but usually that would fail the dependency resolution anyways
-                if is_part_of_workspace {
-                    dependencies.extend(workspace.dependencies.clone());
+                if log::log_enabled!(log::Level::Debug) {
+                    log::debug!(
+                        "flutter: analyzing dart pubspec file '{}'",
+                        entry.path().display()
+                    );
                 }
+
+                let yaml = load_yaml(entry.path())?;
+                dependencies.extend(self.analyze_pubspec(&yaml, &pubspec_dir));
             }
+            // analysis_options.yaml
+            else {
+                if log::log_enabled!(log::Level::Debug) {
+                    log::debug!(
+                        "flutter: analyzing dart analysis options file '{}'",
+                        entry.path().display()
+                    );
+                }
 
-            // regular lib dependencies
-            dependencies.extend(
-                find_local_dependencies(&yaml["dependencies"], &pubspec_dir).unwrap_or_default(),
-            );
-
-            // development dependencies
-            dependencies.extend(
-                find_local_dependencies(&yaml["dev_dependencies"], &pubspec_dir)
-                    .unwrap_or_default(),
-            );
-
-            // dependency overrides
-            dependencies.extend(
-                find_local_dependencies(&yaml["dependency_overrides"], &pubspec_dir)
-                    .unwrap_or_default(),
-            );
-
-            // fonts
-            dependencies.extend(find_fonts(&yaml["fonts"], &pubspec_dir).unwrap_or_default());
-
-            // assets
-            dependencies
-                .extend(find_assets(&yaml["flutter"]["assets"], &pubspec_dir).unwrap_or_default());
+                let mut finder = ReferenceFinder::new();
+                dependencies.extend(finder.extract_from(entry.path(), &analyze_analysis_options)?);
+            }
         }
 
         Ok(dependencies)
     }
+}
+
+fn analyze_analysis_options(path: &Path, dir: &Path) -> Result<Vec<DepPattern>> {
+    let mut found = Vec::new();
+    let yaml = load_yaml(path)?;
+    let include = &yaml["include"];
+
+    let includes = if let Some(str) = include.as_str() {
+        vec![str.to_string()]
+    } else {
+        yaml_str_list(include)
+    };
+
+    for include in includes {
+        if include.starts_with("package:") {
+            continue;
+        }
+
+        found.push(DepPattern::plain(&include, dir)?);
+    }
+
+    Ok(found)
 }
 
 fn find_assets(assets: &Yaml, pubspec_dir: &PathBuf) -> Option<Vec<DepPattern>> {

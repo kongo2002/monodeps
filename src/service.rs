@@ -486,7 +486,7 @@ where
         .filter_map(|e| e.ok())
 }
 
-/// Helper structure to recursively find line-based file references in language files (e.g.
+/// Helper structure to recursively find file references in language files (e.g.
 /// "imports" in protobuf or justfiles). The method `extract_from` supports detection of cyclic
 /// dependencies.
 struct ReferenceFinder {
@@ -504,9 +504,8 @@ impl ReferenceFinder {
     where
         P: AsRef<Path>,
         I: IntoIterator<Item = DepPattern>,
-        F: Fn(String, &Path) -> I,
+        F: Fn(&Path, &Path) -> Result<I>,
     {
-        let mut scanned_lines = 0usize;
         let mut imports = Vec::new();
 
         let self_path = path
@@ -537,21 +536,49 @@ impl ReferenceFinder {
             return Ok(imports);
         }
 
-        let lines = read_lines(&path)?.map_while(Result::ok);
-
-        for line in lines {
-            scanned_lines += 1;
-            if scanned_lines > SCAN_MAX_LINES {
-                break;
-            }
-
-            for import in extractor(line, parent) {
-                imports.extend(self.extract_from(&import, extractor)?);
-                imports.push(import);
-            }
+        for pattern in extractor(path.as_ref(), parent)? {
+            imports.extend(self.extract_from(&pattern, extractor)?);
+            imports.push(pattern);
         }
 
         Ok(imports)
+    }
+}
+/// Helper structure to recursively find line-based file references in language files (e.g.
+/// "imports" in protobuf or justfiles). The method `extract_from` supports detection of cyclic
+/// dependencies.
+struct ReferenceLineFinder {
+    finder: ReferenceFinder,
+}
+
+impl ReferenceLineFinder {
+    fn new() -> Self {
+        Self {
+            finder: ReferenceFinder::new(),
+        }
+    }
+
+    fn extract_from<P, I, F>(&mut self, path: P, extractor: &F) -> Result<Vec<DepPattern>>
+    where
+        P: AsRef<Path>,
+        I: IntoIterator<Item = DepPattern>,
+        F: Fn(String, &Path) -> I,
+    {
+        self.finder.extract_from(path, &|file_path, parent| {
+            let mut found = Vec::new();
+            let mut scanned_lines = 0usize;
+            let lines = read_lines(file_path)?.map_while(Result::ok);
+
+            for line in lines {
+                scanned_lines += 1;
+                if scanned_lines > SCAN_MAX_LINES {
+                    break;
+                }
+
+                found.extend(extractor(line, parent));
+            }
+            Ok(found)
+        })
     }
 }
 
@@ -929,6 +956,29 @@ mod tests {
 
         // 2 Depsfile + 2 Makefile
         assert_eq!(4, services.len());
+
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_dependencies_flutter_analysis_options() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let all_opts = Opts {
+            supported_roots: vec![DepsfileType::Makefile],
+            ..opts
+        };
+        let services = Service::discover(&all_opts)?;
+
+        // 2 Depsfile + 2 Makefile
+        assert_eq!(4, services.len());
+
+        // check for `main_options.yaml` referenced in the analysis_options.yaml
+        let asset_deps =
+            dependency::resolve(services, vec!["main_options.yaml".to_string()], &all_opts)?;
+
+        // - service-b
+        assert_eq!(1, asset_deps.len());
+        expect_output(asset_deps, vec!["service-b"])?;
 
         Ok(())
     }

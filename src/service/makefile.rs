@@ -8,7 +8,7 @@ use anyhow::Result;
 use crate::cli::Opts;
 use crate::config::DepPattern;
 
-use super::{LanguageAnalyzer, ReferenceFinder};
+use super::{LanguageAnalyzer, ReferenceLineFinder};
 
 pub(super) struct MakefileAnalyzer {
     variable_rgx: Regex,
@@ -25,7 +25,7 @@ impl MakefileAnalyzer {
     where
         P: AsRef<Path>,
     {
-        ReferenceFinder::new().extract_from(path, &|line, parent_dir| {
+        ReferenceLineFinder::new().extract_from(path, &|line, parent_dir| {
             self.extract_from_line(&line, parent_dir)
         })
     }

@@ -1,0 +1,3 @@
+include:
+  - package:flutter_lints/recommended.yaml
+  - ../main_options.yaml

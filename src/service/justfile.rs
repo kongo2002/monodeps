@@ -5,7 +5,7 @@ use walkdir::DirEntry;
 
 use crate::cli::Opts;
 use crate::config::DepPattern;
-use crate::service::ReferenceFinder;
+use crate::service::ReferenceLineFinder;
 
 use super::LanguageAnalyzer;
 
@@ -36,7 +36,7 @@ fn extract_imports<P>(path: P) -> Result<Vec<DepPattern>>
 where
     P: AsRef<Path>,
 {
-    ReferenceFinder::new().extract_from(path, &|line, parent_dir| {
+    ReferenceLineFinder::new().extract_from(path, &|line, parent_dir| {
         extract_from_line(&line, parent_dir)
     })
 }
