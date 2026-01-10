@@ -9,7 +9,7 @@ use crate::path::PathInfo;
 use crate::service::{ReferenceFinder, parent_dir};
 use crate::utils::{load_yaml, yaml_str_list};
 
-use super::LanguageAnalyzer;
+use super::{LanguageAnalyzer, nearest_ancestor};
 
 struct Workspace {
     dependencies: Vec<DepPattern>,
@@ -70,52 +70,46 @@ impl FlutterAnalyzer {
 
 impl LanguageAnalyzer for FlutterAnalyzer {
     fn file_relevant(&self, file_name: &str) -> bool {
-        file_name == "pubspec.yaml" || file_name == "analysis_options.yaml"
+        file_name == "pubspec.yaml"
     }
 
     fn dependencies(
         &self,
         entries: Vec<DirEntry>,
-        _dir: &str,
-        _opts: &Opts,
+        dir: &str,
+        opts: &Opts,
     ) -> Result<Vec<DepPattern>> {
         let mut dependencies = Vec::new();
 
         for entry in entries {
-            // pubspec.yaml
-            if entry
-                .file_name()
-                .to_str()
-                .map(|file_name| file_name.eq_ignore_ascii_case("pubspec.yaml"))
-                .unwrap_or(false)
-            {
-                let pubspec_dir = match parent_dir(entry.path()) {
-                    Some(d) => d,
-                    None => continue,
-                };
+            let pubspec_dir = match parent_dir(entry.path()) {
+                Some(d) => d,
+                None => continue,
+            };
 
-                if log::log_enabled!(log::Level::Debug) {
-                    log::debug!(
-                        "flutter: analyzing dart pubspec file '{}'",
-                        entry.path().display()
-                    );
-                }
-
-                let yaml = load_yaml(entry.path())?;
-                dependencies.extend(self.analyze_pubspec(&yaml, &pubspec_dir));
+            if log::log_enabled!(log::Level::Debug) {
+                log::debug!(
+                    "flutter: analyzing dart pubspec file '{}'",
+                    entry.path().display()
+                );
             }
-            // analysis_options.yaml
-            else {
-                if log::log_enabled!(log::Level::Debug) {
-                    log::debug!(
-                        "flutter: analyzing dart analysis options file '{}'",
-                        entry.path().display()
-                    );
-                }
 
-                let mut finder = ReferenceFinder::new();
-                dependencies.extend(finder.extract_from(entry.path(), &analyze_analysis_options)?);
+            let yaml = load_yaml(entry.path())?;
+            dependencies.extend(self.analyze_pubspec(&yaml, &pubspec_dir));
+        }
+
+        // aside from analysis
+        if let Some(analysis_options) = nearest_ancestor("analysis_options.yaml", dir, &opts.target)
+        {
+            if log::log_enabled!(log::Level::Debug) {
+                log::debug!(
+                    "flutter: analyzing dart analysis options file '{}'",
+                    analysis_options.display()
+                );
             }
+
+            let mut finder = ReferenceFinder::new();
+            dependencies.extend(finder.extract_from(analysis_options, &analyze_analysis_options)?);
         }
 
         Ok(dependencies)

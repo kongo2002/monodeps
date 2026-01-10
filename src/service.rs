@@ -540,6 +540,9 @@ impl ReferenceFinder {
             return Ok(imports);
         }
 
+        // include file reference itself
+        imports.push(DepPattern::plain(&path, "")?);
+
         for pattern in extractor(path.as_ref(), parent)? {
             imports.extend(self.extract_from(&pattern, extractor)?);
             imports.push(pattern);
@@ -610,6 +613,20 @@ where
     }
 
     parents
+}
+
+fn nearest_ancestor<P>(filename: &str, dir: P, root_dir: &PathInfo) -> Option<PathBuf>
+where
+    P: AsRef<Path>,
+{
+    for path in parents_until_root(dir, root_dir) {
+        let file = path.join(filename);
+        if file.is_file() {
+            return Some(file);
+        }
+    }
+
+    None
 }
 
 fn map_depsfile(filename: &str, opts: &Opts) -> Option<DepsfileType> {
