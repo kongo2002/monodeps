@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use crate::cli::Opts;
-use crate::config::DepPattern;
 use crate::path::PathInfo;
 use crate::service::{BuildTrigger, Service};
 use anyhow::{Result, anyhow};
@@ -18,12 +17,7 @@ pub fn resolve(
 
     // 1. check global dependencies
     // if any changed file matches any global dependency every service will be returned
-    for global_dep in opts
-        .config
-        .global_dependencies
-        .iter()
-        .flat_map(|d| DepPattern::new(d, &opts.target.canonicalized))
-    {
+    for global_dep in opts.config.global_dependencies.iter() {
         if canon_changed_files
             .iter()
             .any(|f| global_dep.is_match(&f.canonicalized))

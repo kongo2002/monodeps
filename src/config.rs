@@ -8,10 +8,10 @@ use yaml_rust::Yaml;
 use crate::path::PathInfo;
 use crate::utils::{load_yaml, yaml_str_list};
 
-#[derive(Default, Debug, PartialEq)]
+#[derive(Default, Debug)]
 pub struct Config {
     pub auto_discovery: AutoDiscoveryConfig,
-    pub global_dependencies: Vec<String>,
+    pub global_dependencies: Vec<DepPattern>,
 }
 
 #[derive(Default, Debug, PartialEq)]
@@ -31,11 +31,19 @@ pub struct DotnetConfig {
 }
 
 impl Config {
-    pub fn new(path: &str) -> Result<Config> {
+    pub fn new(path: &str, root: &PathInfo) -> Result<Config> {
         let yaml = load_yaml(path)?;
 
         let auto_disc = &yaml["auto_discovery"];
-        let global_dependencies = yaml_str_list(&yaml["global_dependencies"]);
+
+        let empty = Vec::new();
+        let glob_deps = &yaml["global_dependencies"];
+        let global_dependencies = glob_deps
+            .as_vec()
+            .unwrap_or(&empty)
+            .iter()
+            .flat_map(|elem| parse_dependency(elem, path, &root.canonicalized))
+            .collect();
 
         let go_disc = &auto_disc["go"];
         let go_package_prefixes = yaml_str_list(&go_disc["package_prefixes"]);
@@ -247,18 +255,19 @@ pub struct Depsfile {
 impl Depsfile {
     /// Attempt to load `Config` from the given file name that
     /// is expected to be a YAML file.
-    pub fn load<P>(file_type: DepsfileType, file: P) -> Result<Depsfile>
+    pub fn load<P, R>(file_type: DepsfileType, file: P, root: R) -> Result<Depsfile>
     where
-        P: AsRef<Path> + Copy,
+        P: AsRef<Path>,
+        R: AsRef<Path>,
     {
         match file_type {
             DepsfileType::Depsfile => {
-                let config_yaml = load_yaml(file)?;
+                let config_yaml = load_yaml(&file)?;
                 Depsfile::depsfile_from_yaml(config_yaml, file)
             }
             DepsfileType::Buildfile => {
-                let config_yaml = load_yaml(file)?;
-                Depsfile::buildfile_from_yaml(config_yaml, file)
+                let config_yaml = load_yaml(&file)?;
+                Depsfile::buildfile_from_yaml(config_yaml, file, root)
             }
             DepsfileType::Justfile => Ok(Depsfile::empty()),
             DepsfileType::Makefile => Ok(Depsfile::empty()),
@@ -319,16 +328,11 @@ impl Depsfile {
     }
 
     /// Try to parse the given `Yaml` into a valid `Config`
-    fn buildfile_from_yaml<P>(config_yaml: Yaml, file: P) -> Result<Depsfile>
+    fn buildfile_from_yaml<P, R>(config_yaml: Yaml, file: P, root: R) -> Result<Depsfile>
     where
         P: AsRef<Path>,
+        R: AsRef<Path>,
     {
-        let dir = file
-            .as_ref()
-            .ancestors()
-            .nth(1)
-            .ok_or_else(|| anyhow!("cannot determine Depsfile directory"))?;
-
         let spec = &config_yaml["spec"];
         let depends_on = &spec["dependsOn"];
         let dep_patterns = yaml_str_list(depends_on);
@@ -345,7 +349,9 @@ impl Depsfile {
         let dependencies = dep_patterns
             .into_iter()
             .flat_map(|dep| {
-                let dependency = DepPattern::new(&dep, dir);
+                // NOTE: in the `Buildfile.yaml` the dependencies were always
+                // relative to the repository root
+                let dependency = DepPattern::new(&dep, &root);
                 if dependency.is_err() {
                     log::warn!("{}: invalid dependency '{}'", file.as_ref().display(), dep);
                 }
@@ -360,9 +366,10 @@ impl Depsfile {
     }
 }
 
-fn parse_dependency<P>(yaml: &Yaml, path: P, dir: &Path) -> Result<DepPattern>
+fn parse_dependency<P, D>(yaml: &Yaml, path: P, dir: D) -> Result<DepPattern>
 where
     P: AsRef<Path>,
+    D: AsRef<Path>,
 {
     let pattern = if let Some(str) = yaml.as_str() {
         DepPattern::new(str, dir)
@@ -410,6 +417,7 @@ mod tests {
     use crate::config::{
         AutoDiscoveryConfig, Depsfile, DepsfileType, DotnetConfig, GoDepsConfig, Language,
     };
+    use crate::path::PathInfo;
 
     use super::{Config, DepPattern};
 
@@ -453,21 +461,19 @@ global_dependencies:
 "#,
         )?;
 
-        let result = Config::new(dir.path().join(config_name).to_str().unwrap())?;
+        let root = PathInfo::new(dir.path(), "")?;
+        let result = Config::new(dir.path().join(config_name).to_str().unwrap(), &root)?;
 
         assert_eq!(
-            Config {
-                auto_discovery: AutoDiscoveryConfig {
-                    go: GoDepsConfig {
-                        package_prefixes: vec!["foo/bar".to_string()]
-                    },
-                    dotnet: DotnetConfig {
-                        package_namespaces: vec!["Foo.Bar".to_string()]
-                    }
+            AutoDiscoveryConfig {
+                go: GoDepsConfig {
+                    package_prefixes: vec!["foo/bar".to_string()]
                 },
-                global_dependencies: vec!["justfile".to_string()]
+                dotnet: DotnetConfig {
+                    package_namespaces: vec!["Foo.Bar".to_string()]
+                }
             },
-            result
+            result.auto_discovery
         );
 
         Ok(())
@@ -499,7 +505,7 @@ dependencies:
 "#,
         )?;
 
-        let depsfile = Depsfile::load(DepsfileType::Depsfile, &dir.path().join(file_name))?;
+        let depsfile = Depsfile::load(DepsfileType::Depsfile, &dir.path().join(file_name), dir)?;
 
         assert_eq!(vec![Language::Golang, Language::Dotnet], depsfile.languages);
         assert_eq!(2, depsfile.dependencies.len());
@@ -529,7 +535,7 @@ metadata:
 "#,
         )?;
 
-        let depsfile = Depsfile::load(DepsfileType::Buildfile, &dir.path().join(file_name))?;
+        let depsfile = Depsfile::load(DepsfileType::Buildfile, &dir.path().join(file_name), dir)?;
 
         assert_eq!(vec![Language::Golang], depsfile.languages);
         assert_eq!(1, depsfile.dependencies.len());
@@ -554,7 +560,7 @@ metadata:
 "#,
         )?;
 
-        let depsfile = Depsfile::load(DepsfileType::Buildfile, &dir.path().join(file_name))?;
+        let depsfile = Depsfile::load(DepsfileType::Buildfile, &dir.path().join(file_name), dir)?;
 
         assert_eq!(true, depsfile.languages.is_empty());
         assert_eq!(1, depsfile.dependencies.len());

@@ -281,7 +281,11 @@ impl Service {
     fn discover_service(analyzer: &Analyzer, ctx: ServiceContext, opts: &Opts) -> Result<Service> {
         // read/parse dependency file (depsfile, buildfile...) and extract
         // any potential explicitly listed dependencies
-        let base_depsfile = Depsfile::load(ctx.filetype, &ctx.depsfile_location.canonicalized)?;
+        let base_depsfile = Depsfile::load(
+            ctx.filetype,
+            &ctx.depsfile_location.canonicalized,
+            &opts.target.canonicalized,
+        )?;
 
         // try to determine what languages we can auto-discover
         let depsfile = auto_discover_languages(base_depsfile, &ctx.service_location);
@@ -680,7 +684,9 @@ mod tests {
     use anyhow::{Result, anyhow};
 
     use crate::cli::Opts;
-    use crate::config::{AutoDiscoveryConfig, Config, DepsfileType, DotnetConfig, GoDepsConfig};
+    use crate::config::{
+        AutoDiscoveryConfig, Config, DepPattern, DepsfileType, DotnetConfig, GoDepsConfig,
+    };
     use crate::path::PathInfo;
     use crate::service::ServiceContext;
     use crate::{dependency, print_services};
@@ -1264,7 +1270,7 @@ mod tests {
             supported_roots: vec![DepsfileType::Makefile, DepsfileType::Justfile],
             config: Config {
                 auto_discovery: Default::default(),
-                global_dependencies: vec![".gitlab".to_string()],
+                global_dependencies: vec![DepPattern::new(".gitlab", "./tests/examples/full")?],
             },
             ..opts
         };

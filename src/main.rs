@@ -69,7 +69,7 @@ fn validate(service_path: &str, opts: Opts) {
                 println!("Dependencies (configured):");
 
                 for dependency in svc.depsfile.dependencies {
-                    println!("  - {}", dependency)
+                    println!("  - {}", dependency);
                 }
             }
 
@@ -77,13 +77,21 @@ fn validate(service_path: &str, opts: Opts) {
                 println!("Dependencies (auto-discovered):");
 
                 for dependency in svc.auto_dependencies {
-                    println!("  - {} [{}]", dependency.pattern, dependency.language)
+                    println!("  - {} [{}]", dependency.pattern, dependency.language);
+                }
+            }
+
+            if !opts.config.global_dependencies.is_empty() {
+                println!("Dependencies (global):");
+
+                for dependency in opts.config.global_dependencies {
+                    println!("  - {}", dependency);
                 }
             }
         }
         Err(err) => {
             eprintln!("failed validate service dependencies: {err}");
-            std::process::exit(1)
+            std::process::exit(1);
         }
     }
 }
@@ -218,7 +226,7 @@ mod tests {
 
     #[test]
     fn validate_does_not_fail() {
-        // we just test that is does not fail
+        // we just test that it does not fail
         validate("./examples/full/service-c", mk_opts());
     }
 

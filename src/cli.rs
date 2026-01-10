@@ -85,10 +85,10 @@ impl Opts {
         let verbose = matches.opt_present("v");
 
         let config = match config_path {
-            Some(path) => Config::new(&path)?,
+            Some(path) => Config::new(&path, &target)?,
             None => {
                 // try default location in current directory
-                Config::new("./.monodeps.yaml").unwrap_or_default()
+                Config::new("./.monodeps.yaml", &target).unwrap_or_default()
             }
         };
 
