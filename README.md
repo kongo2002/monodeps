@@ -94,6 +94,8 @@ dependencies:
   - ../../services/auth-service
   - ../../shared/postgres
   - ../../shared/pagination
+  # alternatively you can also specify a regex:
+  - regex: '\.proto$'
 
 # Specifying the language of the respective service helps monodeps to know what
 # files to look for in terms of auto-discovering dependencies. Otherwise,

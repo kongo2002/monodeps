@@ -87,19 +87,18 @@ impl DepPattern {
         P: AsRef<Path>,
         R: AsRef<Path>,
     {
-        let pattern = if let Some(str_path) = dependency.as_ref().to_str() {
-            if str_path.contains(['*', '?']) {
-                Some(to_glob_regex(str_path)?)
-            } else {
-                None
-            }
+        if let Some(str_path) = dependency.as_ref().to_str()
+            && str_path.contains(['*', '?'])
+        {
+            let pattern = Some(to_glob_regex(str_path)?);
+            let raw = PathInfo::new("", root_dir)?;
+
+            Ok(Self { raw, pattern })
         } else {
-            None
-        };
+            let raw = PathInfo::new(dependency, root_dir)?;
 
-        let raw = PathInfo::new(dependency, root_dir)?;
-
-        Ok(Self { raw, pattern })
+            Ok(Self { raw, pattern: None })
+        }
     }
 
     /// Creates a new `DepPattern` given the `dependency` path (often a relative path) and the
@@ -114,6 +113,18 @@ impl DepPattern {
         let raw = PathInfo::new(dependency, root_dir)?;
 
         Ok(Self { raw, pattern: None })
+    }
+
+    /// Creates a new `DepPattern` given a regular expression and the
+    /// `root_dir`, the `dependency` is relative to.
+    pub fn regex<P>(regex: &str, root_dir: P) -> Result<Self>
+    where
+        P: AsRef<Path>,
+    {
+        let raw = PathInfo::new("", root_dir)?;
+        let pattern = Some(Regex::new(regex)?);
+
+        Ok(Self { raw, pattern })
     }
 
     pub fn is_match(&self, path: &str) -> bool {
@@ -272,17 +283,14 @@ impl Depsfile {
             .ok_or_else(|| anyhow!("cannot determine Depsfile directory"))?;
 
         let languages = parse_languages(&config_yaml["languages"], &file);
-        let dep_patterns = yaml_str_list(&config_yaml["dependencies"]);
+        let dep_patterns = &config_yaml["dependencies"];
 
+        let empty = Vec::new();
         let dependencies = dep_patterns
-            .into_iter()
-            .flat_map(|dep| {
-                let dependency = DepPattern::new(&dep, dir);
-                if dependency.is_err() {
-                    log::warn!("{}: invalid dependency '{}'", file.as_ref().display(), dep);
-                }
-                dependency
-            })
+            .as_vec()
+            .unwrap_or(&empty)
+            .iter()
+            .flat_map(|elem| parse_dependency(elem, &file, dir))
             .collect();
 
         let known_keys = ["languages", "dependencies"];
@@ -350,6 +358,25 @@ impl Depsfile {
             languages,
         })
     }
+}
+
+fn parse_dependency<P>(yaml: &Yaml, path: P, dir: &Path) -> Result<DepPattern>
+where
+    P: AsRef<Path>,
+{
+    let pattern = if let Some(str) = yaml.as_str() {
+        DepPattern::new(str, dir)
+    } else if let Some(str) = yaml["regex"].as_str() {
+        DepPattern::regex(str, dir)
+    } else {
+        Err(anyhow!("expecting string or 'regex' property"))
+    };
+
+    if let Err(err) = &pattern {
+        log::warn!("{}: invalid dependency: {}", path.as_ref().display(), err);
+    }
+
+    pattern
 }
 
 fn parse_languages<P>(value: &Yaml, file: P) -> Vec<Language>
@@ -467,13 +494,20 @@ languages:
   - dotnet
 dependencies:
   - ../shared/auth
+  - regex: '\.proto$'
+  - invalid: 252
 "#,
         )?;
 
         let depsfile = Depsfile::load(DepsfileType::Depsfile, &dir.path().join(file_name))?;
 
         assert_eq!(vec![Language::Golang, Language::Dotnet], depsfile.languages);
-        assert_eq!(1, depsfile.dependencies.len());
+        assert_eq!(2, depsfile.dependencies.len());
+
+        assert_eq!(
+            true,
+            depsfile.dependencies[1].is_match("some/random/place/file.proto")
+        );
 
         Ok(())
     }
@@ -577,5 +611,17 @@ metadata:
 
         assert_eq!(pat.is_match("./domains/foo/.xhidden/stuff"), true);
         assert_eq!(pat.is_match("./domains/foo/.hidden/stuff"), false);
+    }
+
+    #[test]
+    fn dep_pattern_regex() {
+        let pat = DepPattern::regex("\\.proto$", ".").unwrap();
+
+        assert_eq!(pat.is_match("./domains/foo/services/file.proto"), true);
+        assert_eq!(pat.is_match("./domains/foo/services/proto"), false);
+        assert_eq!(pat.is_match("./domains/foo/services/file.proto/foo"), false);
+
+        assert_eq!(pat.is_matched_by("./domains/foo/services/file.proto"), true);
+        assert_eq!(pat.is_child_of("./domains/foo/services/file.proto"), false);
     }
 }
