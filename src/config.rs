@@ -192,7 +192,7 @@ fn to_glob_regex(pattern: &str) -> Result<Regex> {
 
 /// List of supported languages/frameworks
 ///
-/// NOTE: remember to add new languages to `Analyzer::new`
+/// NOTE: remember to extend `VALUES` below
 #[derive(Debug, Eq, PartialEq, Hash, Clone, Copy)]
 pub enum Language {
     Golang,
@@ -203,6 +203,19 @@ pub enum Language {
     Protobuf,
     Justfile,
     Makefile,
+}
+
+impl Language {
+    pub const VALUES: [Self; 8] = [
+        Self::Golang,
+        Self::Dotnet,
+        Self::Flutter,
+        Self::Kustomize,
+        Self::JavaScript,
+        Self::Protobuf,
+        Self::Justfile,
+        Self::Makefile,
+    ];
 }
 
 impl Display for Language {
@@ -227,12 +240,13 @@ impl TryFrom<&str> for Language {
         match value {
             "go" => Ok(Language::Golang),
             "golang" => Ok(Language::Golang),
-            "dotnet" | "csharp" => Ok(Language::Dotnet),
+            "dotnet" | "csharp" | "C#" | "c#" => Ok(Language::Dotnet),
             "dart" | "flutter" => Ok(Language::Flutter),
             "kustomize" => Ok(Language::Kustomize),
             "js" | "javascript" => Ok(Language::JavaScript),
             "proto" => Ok(Language::Protobuf),
             "make" | "makefile" => Ok(Language::Makefile),
+            "just" | "justfile" => Ok(Language::Justfile),
             unknown => Err(format!("unknown language: {}", unknown)),
         }
     }
@@ -629,5 +643,16 @@ metadata:
 
         assert_eq!(pat.is_matched_by("./domains/foo/services/file.proto"), true);
         assert_eq!(pat.is_child_of("./domains/foo/services/file.proto"), false);
+    }
+
+    #[test]
+    fn language_parse_format() {
+        for language in Language::VALUES {
+            let formatted = format!("{}", language);
+            let parsed: Option<Language> = formatted.as_str().try_into().ok();
+
+            assert_eq!(true, parsed.is_some(), "parsing '{formatted}'");
+            assert_eq!(language, parsed.unwrap(), "parsing '{formatted}'");
+        }
     }
 }

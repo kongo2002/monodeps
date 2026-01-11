@@ -94,19 +94,8 @@ impl Analyzer {
     /// Create a new `Analyzer` instance. It can be used across multiple different services,
     /// meaning you usually have to instantiate only one instance for process.
     fn new(opts: &Opts) -> Analyzer {
-        let all_languages = vec![
-            Language::Golang,
-            Language::Dotnet,
-            Language::Flutter,
-            Language::Kustomize,
-            Language::JavaScript,
-            Language::Protobuf,
-            Language::Justfile,
-            Language::Makefile,
-        ];
-
         // collect all language analyzers that are properly configured and enabled
-        let analyzers = all_languages
+        let analyzers = Language::VALUES
             .into_iter()
             .filter(|language| opts.config.auto_discovery_enabled(language))
             .flat_map(|language| {

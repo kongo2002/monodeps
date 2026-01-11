@@ -198,7 +198,7 @@ mod tests {
     use std::io::Cursor;
 
     use crate::cli::Opts;
-    use crate::config::{AutoDiscoveryConfig, Config, DotnetConfig, GoDepsConfig};
+    use crate::config::{AutoDiscoveryConfig, Config, DepPattern, DotnetConfig, GoDepsConfig};
     use crate::path::PathInfo;
     use crate::{dependencies, validate};
 
@@ -214,7 +214,7 @@ mod tests {
                         package_namespaces: vec![],
                     },
                 },
-                global_dependencies: vec![],
+                global_dependencies: vec![DepPattern::plain(".github", "./tests").unwrap()],
             },
             all: false,
             output: crate::cli::OutputFormat::Plain,
