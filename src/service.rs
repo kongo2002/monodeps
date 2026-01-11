@@ -1089,6 +1089,40 @@ mod tests {
     }
 
     #[test]
+    fn resolve_dependencies_dotnet_directory_files() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let services = Service::discover(&opts)?;
+
+        // 2 Depsfile
+        assert_eq!(2, services.len());
+
+        let deps = dependency::resolve(services, vec!["Directory.Build.props".to_string()], &opts)?;
+
+        // - service-c
+        assert_eq!(1, deps.len());
+        expect_output(deps, vec!["service-c"])?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_dependencies_dotnet_global_json() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let services = Service::discover(&opts)?;
+
+        // 2 Depsfile
+        assert_eq!(2, services.len());
+
+        let deps = dependency::resolve(services, vec!["global.json".to_string()], &opts)?;
+
+        // - service-c
+        assert_eq!(1, deps.len());
+        expect_output(deps, vec!["service-c"])?;
+
+        Ok(())
+    }
+
+    #[test]
     fn resolve_dependencies_shared() -> Result<()> {
         let opts = mk_opts("./tests/examples/full")?;
         let all_opts = Opts {

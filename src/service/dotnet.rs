@@ -119,10 +119,16 @@ impl LanguageAnalyzer for DotnetAnalyzer {
             }));
         }
 
+        // look for directory files like `Directory.Build.props`
         for dir_file_name in DIRECTORY_FILES {
             if let Some(dir_file) = nearest_ancestor(dir_file_name.filename(), dir, &opts.target) {
                 collected_imports.push(DepPattern::plain(dir_file, dir)?);
             }
+        }
+
+        // look for `global.json`
+        if let Some(global_json) = nearest_ancestor("global.json", dir, &opts.target) {
+            collected_imports.push(DepPattern::plain(global_json, dir)?);
         }
 
         Ok(collected_imports)
