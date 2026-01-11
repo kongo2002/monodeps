@@ -91,9 +91,13 @@ consequently fully depending on monodeps' auto-discovery capabilities.
 # of the changed input files, this service will be candidate for build and
 # publish.
 dependencies:
+  # relative paths are considered from the location of the `Depsfile`:
   - ../../services/auth-service
   - ../../shared/postgres
   - ../../shared/pagination
+  # absolute paths are considered from the repository root (or the `--target`
+  # directory monodeps is being run in):
+  - /Dockerfile
   # alternatively you can also specify a regex:
   - regex: '\.proto$'
 
