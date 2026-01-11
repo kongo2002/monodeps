@@ -42,7 +42,7 @@ impl Config {
             .as_vec()
             .unwrap_or(&empty)
             .iter()
-            .flat_map(|elem| parse_dependency(elem, path, &root.canonicalized))
+            .flat_map(|elem| parse_dependency(elem, path, &root.canonicalized, &root.canonicalized))
             .collect();
 
         let go_disc = &auto_disc["go"];
@@ -269,7 +269,7 @@ pub struct Depsfile {
 impl Depsfile {
     /// Attempt to load `Config` from the given file name that
     /// is expected to be a YAML file.
-    pub fn load<P, R>(file_type: DepsfileType, file: P, root: R) -> Result<Depsfile>
+    pub fn load<P, R>(file_type: DepsfileType, file: P, root_dir: R) -> Result<Depsfile>
     where
         P: AsRef<Path>,
         R: AsRef<Path>,
@@ -277,11 +277,11 @@ impl Depsfile {
         match file_type {
             DepsfileType::Depsfile => {
                 let config_yaml = load_yaml(&file)?;
-                Depsfile::depsfile_from_yaml(config_yaml, file)
+                Depsfile::depsfile_from_yaml(config_yaml, file, root_dir)
             }
             DepsfileType::Buildfile => {
                 let config_yaml = load_yaml(&file)?;
-                Depsfile::buildfile_from_yaml(config_yaml, file, root)
+                Depsfile::buildfile_from_yaml(config_yaml, file, root_dir)
             }
             DepsfileType::Justfile => Ok(Depsfile::empty()),
             DepsfileType::Makefile => Ok(Depsfile::empty()),
@@ -295,9 +295,10 @@ impl Depsfile {
         }
     }
 
-    fn depsfile_from_yaml<P>(config_yaml: Yaml, file: P) -> Result<Depsfile>
+    fn depsfile_from_yaml<P, R>(config_yaml: Yaml, file: P, root_dir: R) -> Result<Depsfile>
     where
         P: AsRef<Path>,
+        R: AsRef<Path>,
     {
         let dir = file
             .as_ref()
@@ -313,7 +314,7 @@ impl Depsfile {
             .as_vec()
             .unwrap_or(&empty)
             .iter()
-            .flat_map(|elem| parse_dependency(elem, &file, dir))
+            .flat_map(|elem| parse_dependency(elem, &file, dir, &root_dir))
             .collect();
 
         let known_keys = ["languages", "dependencies"];
@@ -380,15 +381,25 @@ impl Depsfile {
     }
 }
 
-fn parse_dependency<P, D>(yaml: &Yaml, path: P, dir: D) -> Result<DepPattern>
+fn parse_dependency<P, D, R>(
+    yaml: &Yaml,
+    path: P,
+    current_dir: D,
+    root_dir: R,
+) -> Result<DepPattern>
 where
     P: AsRef<Path>,
     D: AsRef<Path>,
+    R: AsRef<Path>,
 {
     let pattern = if let Some(str) = yaml.as_str() {
-        DepPattern::new(str, dir)
+        if str.starts_with("/") {
+            DepPattern::new(format!(".{str}"), root_dir)
+        } else {
+            DepPattern::new(str, current_dir)
+        }
     } else if let Some(str) = yaml["regex"].as_str() {
-        DepPattern::regex(str, dir)
+        DepPattern::regex(str, current_dir)
     } else {
         Err(anyhow!("expecting string or 'regex' property"))
     };
@@ -495,7 +506,7 @@ global_dependencies:
 
     #[test]
     fn load_depsfile_empty() {
-        let depsfile = Depsfile::depsfile_from_yaml(Yaml::from_str(""), "/tmp/some/where");
+        let depsfile = Depsfile::depsfile_from_yaml(Yaml::from_str(""), "/tmp/some/where", "/tmp");
 
         assert_eq!(depsfile.is_ok(), true);
     }
@@ -514,19 +525,41 @@ languages:
   - dotnet
 dependencies:
   - ../shared/auth
+  - /Dockerfile
+  - .editorconfig
   - regex: '\.proto$'
+
+  # this one is invalid:
   - invalid: 252
 "#,
         )?;
 
-        let depsfile = Depsfile::load(DepsfileType::Depsfile, &dir.path().join(file_name), dir)?;
+        let depsfile = Depsfile::load(DepsfileType::Depsfile, &dir.path().join(file_name), "/tmp")?;
 
         assert_eq!(vec![Language::Golang, Language::Dotnet], depsfile.languages);
-        assert_eq!(2, depsfile.dependencies.len());
+        assert_eq!(4, depsfile.dependencies.len());
 
+        // `/Dockerfile`
+        assert_eq!(true, depsfile.dependencies[1].is_match("/tmp/Dockerfile"));
+
+        // `.editorconfig`
+        //   -> DOES NOT match from repository root
+        assert_eq!(
+            false,
+            depsfile.dependencies[2].is_match("/tmp/.editorconfig")
+        );
+
+        // `.editorconfig`
+        //   -> DOES match from current directory
         assert_eq!(
             true,
-            depsfile.dependencies[1].is_match("some/random/place/file.proto")
+            depsfile.dependencies[2].is_match(&dir.path().join(".editorconfig").to_str().unwrap())
+        );
+
+        // `.proto$`
+        assert_eq!(
+            true,
+            depsfile.dependencies[3].is_match("some/random/place/file.proto")
         );
 
         Ok(())
@@ -585,7 +618,7 @@ metadata:
     #[test]
     fn load_config_no_dependencies() {
         let mut docs = YamlLoader::load_from_str("spec:").unwrap();
-        let config = Depsfile::depsfile_from_yaml(docs.remove(0), "/tmp/some/where");
+        let config = Depsfile::depsfile_from_yaml(docs.remove(0), "/tmp/some/where", "/tmp");
 
         assert_eq!(config.is_ok(), true);
     }
