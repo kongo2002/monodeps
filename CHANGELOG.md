@@ -1,6 +1,16 @@
 # Changelog
 
 
+## 1.6.0
+
+2026-01-11
+
+- feature: support specifying dependencies from repository root
+- feature: support regex dependencies
+- feature: support for `analysis_options.yaml` in flutter
+- feature: support for `global.json` in .NET
+
+
 ## 1.5.0
 
 2025-12-11

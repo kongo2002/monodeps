@@ -48,9 +48,22 @@ impl Opts {
         opts.optflag("", "relative", "return relative paths");
         opts.optflag("", "all", "return all discovered services");
         opts.optflag("v", "verbose", "verbose output");
+        opts.optflag("", "version", "print version");
         opts.optflag("h", "help", "show help");
 
         let matches = opts.parse(&args[1..])?;
+
+        // print help/usage
+        if matches.opt_present("h") {
+            usage(&opts, &args[0]);
+            std::process::exit(0);
+        }
+
+        // print version
+        if matches.opt_present("version") {
+            println!("{}", env!("CARGO_PKG_VERSION"));
+            std::process::exit(0);
+        }
 
         let operation = matches
             .free
@@ -68,12 +81,6 @@ impl Opts {
                 }
             })
             .unwrap_or(Ok(Operation::Dependencies))?;
-
-        // print help/usage
-        if matches.opt_present("h") {
-            usage(&opts, &args[0]);
-            std::process::exit(0);
-        }
 
         let target_dir = matches.opt_str("t").unwrap_or(".".to_owned());
         let target = PathInfo::new(&target_dir, "")?;
