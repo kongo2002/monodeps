@@ -4,6 +4,7 @@ use getopts::Options;
 use crate::config::{Config, DepsfileType};
 use crate::path::PathInfo;
 
+#[derive(Debug, PartialEq)]
 pub enum OutputFormat {
     Plain,
     Json,
@@ -165,7 +166,8 @@ Operations:
 mod tests {
     use anyhow::Result;
 
-    use crate::cli::Operation;
+    use crate::cli::{Operation, OutputFormat};
+    use crate::config::DepsfileType;
 
     use super::Opts;
 
@@ -184,6 +186,65 @@ mod tests {
 
         assert_eq!(Operation::Dependencies, operation);
 
+        Ok(())
+    }
+
+    #[test]
+    fn rootfile_justfile() -> Result<()> {
+        let (_operation, opts) = args(vec!["--justfile"])?;
+
+        assert_eq!(true, opts.is_supported(&DepsfileType::Justfile));
+        assert_eq!(true, opts.is_supported(&DepsfileType::Depsfile));
+        Ok(())
+    }
+
+    #[test]
+    fn rootfile_makefile() -> Result<()> {
+        let (_operation, opts) = args(vec!["--makefile"])?;
+
+        assert_eq!(true, opts.is_supported(&DepsfileType::Makefile));
+        assert_eq!(true, opts.is_supported(&DepsfileType::Depsfile));
+        Ok(())
+    }
+
+    #[test]
+    fn rootfile_buildfile() -> Result<()> {
+        let (_operation, opts) = args(vec!["--buildfile"])?;
+
+        assert_eq!(true, opts.is_supported(&DepsfileType::Buildfile));
+        assert_eq!(true, opts.is_supported(&DepsfileType::Depsfile));
+        Ok(())
+    }
+
+    #[test]
+    fn output_format_yaml() -> Result<()> {
+        let (_operation, opts) = args(vec!["-o", "yaml"])?;
+
+        assert_eq!(OutputFormat::Yaml, opts.output);
+        Ok(())
+    }
+
+    #[test]
+    fn output_format_json() -> Result<()> {
+        let (_operation, opts) = args(vec!["-o", "json"])?;
+
+        assert_eq!(OutputFormat::Json, opts.output);
+        Ok(())
+    }
+
+    #[test]
+    fn output_format_plain() -> Result<()> {
+        let (_operation, opts) = args(vec!["-o", "plain"])?;
+
+        assert_eq!(OutputFormat::Plain, opts.output);
+        Ok(())
+    }
+
+    #[test]
+    fn output_format_invalid() -> Result<()> {
+        let parsed = args(vec!["-o", "unknown"]);
+
+        assert_eq!(true, parsed.is_err());
         Ok(())
     }
 
