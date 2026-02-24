@@ -15,6 +15,7 @@ pub enum OutputFormat {
 pub enum Operation {
     Dependencies,
     Validate(String),
+    Graph,
 }
 
 pub struct Opts {
@@ -76,8 +77,11 @@ impl Opts {
                     Ok(Operation::Validate(matches.free[1].clone()))
                 }
                 "dependencies" => Ok(Operation::Dependencies),
+                "graph" => Ok(Operation::Graph),
                 unknown => {
-                    bail!("unknown operation '{unknown}' [supported: validate, dependencies]")
+                    bail!(
+                        "unknown operation '{unknown}' [supported: validate, dependencies, graph]"
+                    )
                 }
             })
             .unwrap_or(Ok(Operation::Dependencies))?;
