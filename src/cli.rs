@@ -166,6 +166,7 @@ For instance, you could pipe the git diff output to monodeps:
 
 Operations:
     dependencies    determine dependencies (default)
+    graph           output service dependencies in dot format
     validate PATH   validate the given service"#,
         exec
     );
@@ -264,6 +265,15 @@ mod tests {
         let (operation, _opts) = args(vec!["dependencies"])?;
 
         assert_eq!(Operation::Dependencies, operation);
+
+        Ok(())
+    }
+
+    #[test]
+    fn operation_graph() -> Result<()> {
+        let (operation, _opts) = args(vec!["graph"])?;
+
+        assert_eq!(Operation::Graph, operation);
 
         Ok(())
     }
