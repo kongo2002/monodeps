@@ -1,12 +1,13 @@
 resolution: 'workspace'
 
 dependencies:
-  - shared_code:
-      path: ../shared
+  shared_code:
+    git:
+      path: shared
 
 dependency_overrides:
   some_lib:
-    path: ../libs/some_lib
+    path: libs/some_lib
 
 flutter:
   assets:

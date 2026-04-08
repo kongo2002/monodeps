@@ -12,6 +12,7 @@ use crate::utils::{load_yaml, yaml_str_list};
 use super::{LanguageAnalyzer, nearest_ancestor};
 
 struct Workspace {
+    workspace_dir: String,
     dependencies: Vec<DepPattern>,
 }
 
@@ -42,19 +43,28 @@ impl FlutterAnalyzer {
             }
         }
 
+        let relative_dependency_dir = self
+            .workspace
+            .as_ref()
+            .map(|w| PathBuf::from(&w.workspace_dir))
+            .unwrap_or(PathBuf::from(pubspec_dir));
+
         // regular lib dependencies
         dependencies.extend(
-            find_local_dependencies(&yaml["dependencies"], pubspec_dir).unwrap_or_default(),
+            find_local_dependencies(&yaml["dependencies"], &relative_dependency_dir)
+                .unwrap_or_default(),
         );
 
         // development dependencies
         dependencies.extend(
-            find_local_dependencies(&yaml["dev_dependencies"], pubspec_dir).unwrap_or_default(),
+            find_local_dependencies(&yaml["dev_dependencies"], &relative_dependency_dir)
+                .unwrap_or_default(),
         );
 
         // dependency overrides
         dependencies.extend(
-            find_local_dependencies(&yaml["dependency_overrides"], pubspec_dir).unwrap_or_default(),
+            find_local_dependencies(&yaml["dependency_overrides"], &relative_dependency_dir)
+                .unwrap_or_default(),
         );
 
         // fonts
@@ -169,14 +179,24 @@ fn find_fonts(fonts: &Yaml, pubspec_dir: &PathBuf) -> Option<Vec<DepPattern>> {
     )
 }
 
-fn find_local_dependencies(dependencies: &Yaml, pubspec_dir: &PathBuf) -> Option<Vec<DepPattern>> {
+fn find_local_dependencies(dependencies: &Yaml, relative_dir: &PathBuf) -> Option<Vec<DepPattern>> {
     let mut collected = Vec::new();
     let vs = dependencies.as_hash()?;
 
     for (_, value) in vs.iter() {
+        // first we try the "regular" path dependencies
         if let Some(dep) = value["path"]
             .as_str()
-            .and_then(|path| DepPattern::plain(path, pubspec_dir).ok())
+            .and_then(|path| DepPattern::plain(path, relative_dir).ok())
+        {
+            collected.push(dep);
+            continue;
+        }
+
+        // afterwards we try git-path references
+        if let Some(dep) = value["git"]["path"]
+            .as_str()
+            .and_then(|path| DepPattern::plain(path, relative_dir).ok())
         {
             collected.push(dep);
         }
@@ -204,7 +224,11 @@ fn try_parse_workspace_pubspec(root: &PathInfo) -> Option<Workspace> {
         let yaml = DepPattern::plain("pubspec.yaml", &root.canonicalized).ok()?;
         let lockfile = DepPattern::plain("pubspec.lock", &root.canonicalized).ok()?;
         let dependencies = vec![yaml, lockfile];
+        let workspace_dir = String::from(&root.canonicalized);
 
-        Some(Workspace { dependencies })
+        Some(Workspace {
+            dependencies,
+            workspace_dir,
+        })
     }
 }
