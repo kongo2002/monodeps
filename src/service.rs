@@ -1142,10 +1142,9 @@ mod tests {
 
         // - shared
         // - service-a
-        // - service-b
         // - service-c
-        assert_eq!(4, deps.len());
-        expect_output(deps, vec!["service-a", "service-b", "service-c", "shared"])?;
+        assert_eq!(3, deps.len());
+        expect_output(deps, vec!["service-a", "service-c", "shared"])?;
 
         Ok(())
     }

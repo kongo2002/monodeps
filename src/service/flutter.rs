@@ -213,7 +213,6 @@ fn find_local_dependencies(
     let empty = "";
 
     for (_, value) in vs.iter() {
-        // first we try the "regular" path dependencies
         if let Some(dep) = value["path"]
             .as_str()
             .and_then(|path| DepPattern::plain(path, pubspec_dir).ok())
