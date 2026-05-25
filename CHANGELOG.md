@@ -1,6 +1,16 @@
 # Changelog
 
 
+## 1.7.0
+
+2026-05-25
+
+- feature: support for git dependencies in flutter (configured via
+  `.monodeps.yaml`)
+- feature: initial support for `graph` command to output a dependency digraph in
+  [DOT format](https://graphviz.org/doc/info/lang.html)
+
+
 ## 1.6.0
 
 2026-01-11
