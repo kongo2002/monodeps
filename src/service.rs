@@ -691,7 +691,8 @@ mod tests {
 
     use crate::cli::Opts;
     use crate::config::{
-        AutoDiscoveryConfig, Config, DepPattern, DepsfileType, DotnetConfig, GoDepsConfig,
+        AutoDiscoveryConfig, Config, DepPattern, DepsfileType, DotnetConfig, FlutterConfig,
+        GoConfig,
     };
     use crate::path::PathInfo;
     use crate::service::ServiceContext;
@@ -724,11 +725,14 @@ mod tests {
             target: PathInfo::new(target, "")?,
             config: Config {
                 auto_discovery: AutoDiscoveryConfig {
-                    go: GoDepsConfig {
+                    go: GoConfig {
                         package_prefixes: vec!["dev.azure.com/foo/bar".to_string()],
                     },
                     dotnet: DotnetConfig {
                         package_namespaces: vec![],
+                    },
+                    flutter: FlutterConfig {
+                        git_repositories: vec!["github.com/kongo2002/monodeps.git".to_string()],
                     },
                 },
                 global_dependencies: vec![],

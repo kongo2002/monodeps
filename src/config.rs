@@ -16,18 +16,24 @@ pub struct Config {
 
 #[derive(Default, Debug, PartialEq)]
 pub struct AutoDiscoveryConfig {
-    pub go: GoDepsConfig,
+    pub go: GoConfig,
     pub dotnet: DotnetConfig,
+    pub flutter: FlutterConfig,
 }
 
 #[derive(Default, Debug, PartialEq)]
-pub struct GoDepsConfig {
+pub struct GoConfig {
     pub package_prefixes: Vec<String>,
 }
 
 #[derive(Default, Debug, PartialEq)]
 pub struct DotnetConfig {
     pub package_namespaces: Vec<String>,
+}
+
+#[derive(Default, Debug, PartialEq)]
+pub struct FlutterConfig {
+    pub git_repositories: Vec<String>,
 }
 
 impl Config {
@@ -51,13 +57,19 @@ impl Config {
         let dotnet_disc = &auto_disc["dotnet"];
         let dotnet_package_namespaces = yaml_str_list(&dotnet_disc["package_namespaces"]);
 
+        let flutter_disc = &auto_disc["flutter"];
+        let flutter_git_repositories = yaml_str_list(&flutter_disc["git_repositories"]);
+
         Ok(Config {
             auto_discovery: AutoDiscoveryConfig {
-                go: GoDepsConfig {
+                go: GoConfig {
                     package_prefixes: go_package_prefixes,
                 },
                 dotnet: DotnetConfig {
                     package_namespaces: dotnet_package_namespaces,
+                },
+                flutter: FlutterConfig {
+                    git_repositories: flutter_git_repositories,
                 },
             },
             global_dependencies,
@@ -440,7 +452,8 @@ mod tests {
     use yaml_rust::{Yaml, YamlLoader};
 
     use crate::config::{
-        AutoDiscoveryConfig, Depsfile, DepsfileType, DotnetConfig, GoDepsConfig, Language,
+        AutoDiscoveryConfig, Depsfile, DepsfileType, DotnetConfig, FlutterConfig, GoConfig,
+        Language,
     };
     use crate::path::PathInfo;
 
@@ -481,6 +494,9 @@ auto_discovery:
   dotnet:
     package_namespaces:
       - Foo.Bar
+  flutter:
+    git_repositories:
+      - https://github.com/kongo2002/monodeps.git
 global_dependencies:
   - justfile
 "#,
@@ -491,11 +507,14 @@ global_dependencies:
 
         assert_eq!(
             AutoDiscoveryConfig {
-                go: GoDepsConfig {
+                go: GoConfig {
                     package_prefixes: vec!["foo/bar".to_string()]
                 },
                 dotnet: DotnetConfig {
                     package_namespaces: vec!["Foo.Bar".to_string()]
+                },
+                flutter: FlutterConfig {
+                    git_repositories: vec!["https://github.com/kongo2002/monodeps.git".to_string()]
                 }
             },
             result.auto_discovery

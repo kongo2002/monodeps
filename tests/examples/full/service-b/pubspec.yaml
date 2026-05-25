@@ -3,11 +3,16 @@ resolution: 'workspace'
 dependencies:
   shared_code:
     git:
+      url: https://github.com/kongo2002/monodeps.git
       path: shared
+  not_shared_code:
+    git:
+      url: https://github.com/different/repo.git
+      path: service-c
 
 dependency_overrides:
   some_lib:
-    path: libs/some_lib
+    path: ../libs/some_lib
 
 flutter:
   assets:

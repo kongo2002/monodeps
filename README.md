@@ -136,6 +136,7 @@ auto_discovery:
     # This setting is *required* for go auto-discovery of dependencies to work!
     package_prefixes:
       - dev.my.org/services
+
   dotnet:
     # Similarly, you can configure relevant namespace(s) that should be
     # considered relevant to this mono-repository.
@@ -143,6 +144,14 @@ auto_discovery:
     # This setting is *optional*.
     package_namespaces:
       - MyOrganization.Services
+
+  flutter:
+    # In case you have pubspec.yaml files that are referencing packages from the
+    # same repository, you can specify the repository name here. They will be
+    # considered if the given string is a partial match in the `git.url` section
+    # of the respective dependency.
+    git_repositories:
+      - github.com/kongo2002/monodeps.git
 ```
 
 

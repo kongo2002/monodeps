@@ -12,22 +12,31 @@ use crate::utils::{load_yaml, yaml_str_list};
 use super::{LanguageAnalyzer, nearest_ancestor};
 
 struct Workspace {
-    workspace_dir: String,
     dependencies: Vec<DepPattern>,
 }
 
 pub(super) struct FlutterAnalyzer {
     workspace: Option<Workspace>,
+    root_dir: PathBuf,
 }
 
 impl FlutterAnalyzer {
     pub(super) fn new(root: &PathInfo) -> Self {
         let workspace = try_parse_workspace_pubspec(root);
+        let root_dir = PathBuf::from(&root.canonicalized);
 
-        Self { workspace }
+        Self {
+            workspace,
+            root_dir,
+        }
     }
 
-    fn analyze_pubspec(&self, yaml: &Yaml, pubspec_dir: &PathBuf) -> Vec<DepPattern> {
+    fn analyze_pubspec(
+        &self,
+        yaml: &Yaml,
+        pubspec_dir: &PathBuf,
+        git_repositories: &[String],
+    ) -> Vec<DepPattern> {
         let mut dependencies = Vec::new();
 
         if let Some(workspace) = &self.workspace {
@@ -43,28 +52,37 @@ impl FlutterAnalyzer {
             }
         }
 
-        let relative_dependency_dir = self
-            .workspace
-            .as_ref()
-            .map(|w| PathBuf::from(&w.workspace_dir))
-            .unwrap_or(PathBuf::from(pubspec_dir));
-
         // regular lib dependencies
         dependencies.extend(
-            find_local_dependencies(&yaml["dependencies"], &relative_dependency_dir)
-                .unwrap_or_default(),
+            find_local_dependencies(
+                &yaml["dependencies"],
+                pubspec_dir,
+                &self.root_dir,
+                git_repositories,
+            )
+            .unwrap_or_default(),
         );
 
         // development dependencies
         dependencies.extend(
-            find_local_dependencies(&yaml["dev_dependencies"], &relative_dependency_dir)
-                .unwrap_or_default(),
+            find_local_dependencies(
+                &yaml["dev_dependencies"],
+                pubspec_dir,
+                &self.root_dir,
+                git_repositories,
+            )
+            .unwrap_or_default(),
         );
 
         // dependency overrides
         dependencies.extend(
-            find_local_dependencies(&yaml["dependency_overrides"], &relative_dependency_dir)
-                .unwrap_or_default(),
+            find_local_dependencies(
+                &yaml["dependency_overrides"],
+                pubspec_dir,
+                &self.root_dir,
+                git_repositories,
+            )
+            .unwrap_or_default(),
         );
 
         // fonts
@@ -105,7 +123,11 @@ impl LanguageAnalyzer for FlutterAnalyzer {
             }
 
             let yaml = load_yaml(entry.path())?;
-            dependencies.extend(self.analyze_pubspec(&yaml, &pubspec_dir));
+            dependencies.extend(self.analyze_pubspec(
+                &yaml,
+                &pubspec_dir,
+                &opts.config.auto_discovery.flutter.git_repositories,
+            ));
         }
 
         // aside from analysis
@@ -179,26 +201,46 @@ fn find_fonts(fonts: &Yaml, pubspec_dir: &PathBuf) -> Option<Vec<DepPattern>> {
     )
 }
 
-fn find_local_dependencies(dependencies: &Yaml, relative_dir: &PathBuf) -> Option<Vec<DepPattern>> {
+fn find_local_dependencies(
+    dependencies: &Yaml,
+    pubspec_dir: &PathBuf,
+    root_dir: &PathBuf,
+    git_repositories: &[String],
+) -> Option<Vec<DepPattern>> {
     let mut collected = Vec::new();
     let vs = dependencies.as_hash()?;
+    let has_git_repos = !git_repositories.is_empty();
+    let empty = "";
 
     for (_, value) in vs.iter() {
         // first we try the "regular" path dependencies
         if let Some(dep) = value["path"]
             .as_str()
-            .and_then(|path| DepPattern::plain(path, relative_dir).ok())
+            .and_then(|path| DepPattern::plain(path, pubspec_dir).ok())
         {
             collected.push(dep);
             continue;
         }
 
         // afterwards we try git-path references
-        if let Some(dep) = value["git"]["path"]
-            .as_str()
-            .and_then(|path| DepPattern::plain(path, relative_dir).ok())
-        {
-            collected.push(dep);
+        // (only if there are git repositories configured)
+        if has_git_repos {
+            let git = &value["git"];
+            let git_reference = git["url"].as_str().unwrap_or(empty);
+
+            if !git_repositories
+                .iter()
+                .any(|git_repo_candidate| git_reference.contains(git_repo_candidate))
+            {
+                continue;
+            }
+
+            if let Some(dep) = git["path"]
+                .as_str()
+                .and_then(|path| DepPattern::plain(path, root_dir).ok())
+            {
+                collected.push(dep);
+            }
         }
     }
 
@@ -224,11 +266,7 @@ fn try_parse_workspace_pubspec(root: &PathInfo) -> Option<Workspace> {
         let yaml = DepPattern::plain("pubspec.yaml", &root.canonicalized).ok()?;
         let lockfile = DepPattern::plain("pubspec.lock", &root.canonicalized).ok()?;
         let dependencies = vec![yaml, lockfile];
-        let workspace_dir = String::from(&root.canonicalized);
 
-        Some(Workspace {
-            dependencies,
-            workspace_dir,
-        })
+        Some(Workspace { dependencies })
     }
 }

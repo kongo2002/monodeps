@@ -142,7 +142,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::config::{AutoDiscoveryConfig, Config, DotnetConfig, GoDepsConfig};
+    use crate::config::{AutoDiscoveryConfig, Config, DotnetConfig, FlutterConfig, GoConfig};
     use crate::path::PathInfo;
     use crate::service::non_hidden_files;
 
@@ -180,11 +180,14 @@ mod tests {
             target: PathInfo::new(target, "")?,
             config: Config {
                 auto_discovery: AutoDiscoveryConfig {
-                    go: GoDepsConfig {
+                    go: GoConfig {
                         package_prefixes: vec!["dev.azure.com/foo/bar".to_string()],
                     },
                     dotnet: DotnetConfig {
                         package_namespaces: vec![],
+                    },
+                    flutter: FlutterConfig {
+                        git_repositories: vec![],
                     },
                 },
                 global_dependencies: vec![],

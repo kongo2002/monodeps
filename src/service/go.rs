@@ -4,7 +4,7 @@ use anyhow::Result;
 use walkdir::DirEntry;
 
 use crate::cli::Opts;
-use crate::config::{DepPattern, GoDepsConfig};
+use crate::config::{DepPattern, GoConfig};
 
 use super::{LanguageAnalyzer, read_lines};
 
@@ -38,7 +38,7 @@ impl LanguageAnalyzer for GoAnalyzer {
     }
 }
 
-fn find_imports<I>(lines: I, config: &GoDepsConfig) -> Result<Vec<String>>
+fn find_imports<I>(lines: I, config: &GoConfig) -> Result<Vec<String>>
 where
     I: IntoIterator<Item = String>,
 {
@@ -73,7 +73,7 @@ where
     Ok(imports)
 }
 
-fn extract_from_line(line: &str, config: &GoDepsConfig) -> Option<String> {
+fn extract_from_line(line: &str, config: &GoConfig) -> Option<String> {
     let parts: Vec<_> = line.splitn(3, "\"").collect();
     if parts.len() != 3 {
         return None;
@@ -106,7 +106,7 @@ mod tests {
     fn grouped_imports_with_matching_prefix() {
         let imports = find_imports(
             GO_IMPORT01.lines().map(String::from),
-            &crate::config::GoDepsConfig {
+            &crate::config::GoConfig {
                 package_prefixes: vec![String::from("dev.azure.com/foo/bar")],
             },
         )
@@ -119,7 +119,7 @@ mod tests {
     fn grouped_imports_without_matching_prefix() {
         let imports = find_imports(
             GO_IMPORT01.lines().map(String::from),
-            &crate::config::GoDepsConfig {
+            &crate::config::GoConfig {
                 package_prefixes: vec![String::from("dev.azure.com/bar/foo")],
             },
         )
@@ -132,7 +132,7 @@ mod tests {
     fn single_imports_with_matching_prefix() {
         let imports = find_imports(
             GO_IMPORT02.lines().map(String::from),
-            &crate::config::GoDepsConfig {
+            &crate::config::GoConfig {
                 package_prefixes: vec![String::from("dev.azure.com/foo/bar")],
             },
         )

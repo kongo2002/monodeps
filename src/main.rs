@@ -214,7 +214,9 @@ mod tests {
     use std::io::Cursor;
 
     use crate::cli::Opts;
-    use crate::config::{AutoDiscoveryConfig, Config, DepPattern, DotnetConfig, GoDepsConfig};
+    use crate::config::{
+        AutoDiscoveryConfig, Config, DepPattern, DotnetConfig, FlutterConfig, GoConfig,
+    };
     use crate::path::PathInfo;
     use crate::{dependencies, graph, validate};
 
@@ -223,11 +225,14 @@ mod tests {
             target: PathInfo::new("./tests", "").unwrap(),
             config: Config {
                 auto_discovery: AutoDiscoveryConfig {
-                    go: GoDepsConfig {
+                    go: GoConfig {
                         package_prefixes: vec![],
                     },
                     dotnet: DotnetConfig {
                         package_namespaces: vec![],
+                    },
+                    flutter: FlutterConfig {
+                        git_repositories: vec![],
                     },
                 },
                 global_dependencies: vec![DepPattern::plain(".github", "./tests").unwrap()],
