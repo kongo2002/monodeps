@@ -194,7 +194,7 @@ impl Display for DepPattern {
 fn to_glob_regex(pattern: &str) -> Result<Regex> {
     let prepared = pattern
         .replace(".", "\\.")
-        .replace("**", ".+")
+        .replace("**", ".*")
         .replace("*", "[^/\\\\]+")
         .replace("?", ".");
 
