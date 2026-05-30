@@ -6,7 +6,7 @@ use self::service::Service;
 
 use anyhow::Result;
 use env_logger::Env;
-use yaml_rust::{Yaml, YamlEmitter};
+use yaml_rust2::{Yaml, YamlEmitter};
 
 mod cli;
 mod config;

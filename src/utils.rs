@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use anyhow::{Result, bail};
-use yaml_rust::{Yaml, YamlLoader};
+use yaml_rust2::{Yaml, YamlLoader};
 
 /// Try to read the file at path `file` into a `Yaml` structure.
 pub fn load_yaml<P>(file: P) -> Result<Yaml>

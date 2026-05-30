@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 use walkdir::DirEntry;
-use yaml_rust::Yaml;
+use yaml_rust2::Yaml;
 
 use crate::cli::Opts;
 use crate::config::DepPattern;

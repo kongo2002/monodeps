@@ -3,7 +3,7 @@ use std::path::Path;
 
 use anyhow::{Result, anyhow};
 use regex::Regex;
-use yaml_rust::Yaml;
+use yaml_rust2::Yaml;
 
 use crate::path::PathInfo;
 use crate::utils::{load_yaml, yaml_str_list};
@@ -449,7 +449,7 @@ mod tests {
 
     use anyhow::Result;
     use tempfile::TempDir;
-    use yaml_rust::{Yaml, YamlLoader};
+    use yaml_rust2::{Yaml, YamlLoader};
 
     use crate::config::{
         AutoDiscoveryConfig, Depsfile, DepsfileType, DotnetConfig, FlutterConfig, GoConfig,
