@@ -73,7 +73,10 @@ fn try_load_packages<P>(root: P) -> HashMap<String, DepPattern>
 where
     P: AsRef<Path>,
 {
-    load_packages(root).unwrap_or_else(|_| HashMap::new())
+    load_packages(root).unwrap_or_else(|err| {
+        log::warn!("javascript: failed to load workspace packages: {err}");
+        HashMap::new()
+    })
 }
 
 fn load_packages<P>(root: P) -> Result<HashMap<String, DepPattern>>
@@ -101,6 +104,7 @@ where
 
 #[derive(Deserialize, Debug)]
 struct PackageJsonStub {
+    #[serde(default)]
     name: String,
 
     #[serde(default, rename = "devDependencies")]
