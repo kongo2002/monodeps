@@ -1,0 +1,6 @@
+[project]
+name = "service"
+dependencies = ["shared-lib"]
+
+[tool.uv.sources]
+shared-lib = { path = "../shared-lib" }

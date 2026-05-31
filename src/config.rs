@@ -86,6 +86,7 @@ impl Config {
             Language::Protobuf => true,
             Language::Justfile => true,
             Language::Makefile => true,
+            Language::Python => true,
         }
     }
 }
@@ -215,10 +216,11 @@ pub enum Language {
     Protobuf,
     Justfile,
     Makefile,
+    Python,
 }
 
 impl Language {
-    pub const VALUES: [Self; 8] = [
+    pub const VALUES: [Self; 9] = [
         Self::Golang,
         Self::Dotnet,
         Self::Flutter,
@@ -227,6 +229,7 @@ impl Language {
         Self::Protobuf,
         Self::Justfile,
         Self::Makefile,
+        Self::Python,
     ];
 }
 
@@ -241,6 +244,7 @@ impl Display for Language {
             Language::Protobuf => f.write_str("proto"),
             Language::Justfile => f.write_str("justfile"),
             Language::Makefile => f.write_str("makefile"),
+            Language::Python => f.write_str("python"),
         }
     }
 }
@@ -259,6 +263,7 @@ impl TryFrom<&str> for Language {
             "proto" => Ok(Language::Protobuf),
             "make" | "makefile" => Ok(Language::Makefile),
             "just" | "justfile" => Ok(Language::Justfile),
+            "python" | "uv" => Ok(Language::Python),
             unknown => Err(format!("unknown language: {}", unknown)),
         }
     }

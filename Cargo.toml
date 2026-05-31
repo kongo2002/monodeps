@@ -19,6 +19,7 @@ serde_json = "1.0.140"
 sxd-document = "0.3.2"
 sxd-xpath = "0.4.2"
 walkdir = "2.5.0"
+toml = { version = "0.8", default-features = false, features = ["parse"] }
 yaml-rust2 = "0.9"
 
 [dev-dependencies]

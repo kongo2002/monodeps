@@ -20,6 +20,7 @@ use self::justfile::JustfileAnalyzer;
 use self::kustomize::KustomizeAnalyzer;
 use self::makefile::MakefileAnalyzer;
 use self::proto::ProtoAnalyzer;
+use self::python::PythonAnalyzer;
 
 mod dotnet;
 mod flutter;
@@ -29,6 +30,7 @@ mod justfile;
 mod kustomize;
 mod makefile;
 mod proto;
+mod python;
 
 const SCAN_MAX_LINES: usize = 300;
 
@@ -192,6 +194,7 @@ fn language_analyzer(language: Language, opts: &Opts) -> Option<Box<dyn Language
         Language::JavaScript => Some(Box::new(JavaScriptAnalyzer::new(opts.target.clone()))),
         Language::Protobuf => Some(Box::new(ProtoAnalyzer::new(opts.target.clone()))),
         Language::Justfile => Some(Box::new(JustfileAnalyzer {})),
+        Language::Python => Some(Box::new(PythonAnalyzer::new(opts.target.clone()))),
         Language::Makefile => match MakefileAnalyzer::new() {
             Ok(a) => Some(Box::new(a)),
             Err(err) => {
@@ -428,6 +431,12 @@ fn try_determine_language(entry: &DirEntry) -> Option<LanguageMatch> {
                 score: 1,
             });
         }
+        Some("py") => {
+            return Some(LanguageMatch {
+                language: Language::Python,
+                score: 1,
+            });
+        }
         _ => {}
     }
 
@@ -454,6 +463,10 @@ fn try_determine_language(entry: &DirEntry) -> Option<LanguageMatch> {
         }),
         "Makefile" => Some(LanguageMatch {
             language: Language::Makefile,
+            score: 5,
+        }),
+        "pyproject.toml" => Some(LanguageMatch {
+            language: Language::Python,
             score: 5,
         }),
         _ => None,
@@ -843,8 +856,8 @@ mod tests {
         let opts = mk_opts("./tests/examples/full")?;
         let services = Service::discover(&opts)?;
 
-        // just 2 Depsfile
-        assert_eq!(2, services.len());
+        // just 3 Depsfile (service-c, service-e, service-h)
+        assert_eq!(3, services.len());
         Ok(())
     }
 
@@ -857,11 +870,11 @@ mod tests {
         };
         let services = Service::discover(&justfile_opts)?;
 
-        // 2 Depsfile + 4 justfiles
+        // 3 Depsfile + 4 justfiles
         //
-        // technically we have 2 Depsfiles and 5! justfiles,
+        // technically we have 3 Depsfiles and 5! justfiles,
         // however we want the Depsfile in service-e to take precedence
-        assert_eq!(6, services.len());
+        assert_eq!(7, services.len());
 
         let service_e = get_service(services, "service-e");
 
@@ -882,8 +895,8 @@ mod tests {
         };
         let services = Service::discover(&makefile_opts)?;
 
-        // 2 Depsfile + 2 Makefiles
-        assert_eq!(4, services.len());
+        // 3 Depsfile + 2 Makefiles
+        assert_eq!(5, services.len());
 
         let service_g =
             get_service(services, "service-g").ok_or_else(|| anyhow!("missing service-g"))?;
@@ -910,8 +923,8 @@ mod tests {
         };
         let services = Service::discover(&justfile_opts)?;
 
-        // 2 Depsfile + 4 justfiles
-        assert_eq!(6, services.len());
+        // 3 Depsfile + 4 justfiles
+        assert_eq!(7, services.len());
 
         let service_a =
             get_service(services, "service-a").ok_or_else(|| anyhow!("service-a not found"))?;
@@ -934,8 +947,8 @@ mod tests {
         };
         let services = Service::discover(&justfile_opts)?;
 
-        // 2 Depsfile + 4 justfiles
-        assert_eq!(6, services.len());
+        // 3 Depsfile + 4 justfiles
+        assert_eq!(7, services.len());
 
         let service_e =
             get_service(services, "service-e").ok_or_else(|| anyhow!("service-e not found"))?;
@@ -970,8 +983,8 @@ mod tests {
         };
         let services = Service::discover(&makefile_opts)?;
 
-        // 2 Depsfile + 2 Makefile
-        assert_eq!(4, services.len());
+        // 3 Depsfile + 2 Makefile
+        assert_eq!(5, services.len());
 
         Ok(())
     }
@@ -985,8 +998,8 @@ mod tests {
         };
         let services = Service::discover(&all_opts)?;
 
-        // 2 Depsfile + 2 Makefile
-        assert_eq!(4, services.len());
+        // 3 Depsfile + 2 Makefile
+        assert_eq!(5, services.len());
 
         // check for `main_options.yaml` referenced in the analysis_options.yaml
         let asset_deps =
@@ -1008,8 +1021,8 @@ mod tests {
         };
         let services = Service::discover(&all_opts)?;
 
-        // 2 Depsfile + 2 Makefile
-        assert_eq!(4, services.len());
+        // 3 Depsfile + 2 Makefile
+        assert_eq!(5, services.len());
 
         // check for the '../libs/some_lib' dependency from the dependency overrides
         let asset_deps = dependency::resolve(
@@ -1034,8 +1047,8 @@ mod tests {
         };
         let services = Service::discover(&all_opts)?;
 
-        // 2 Depsfile + 2 Makefile
-        assert_eq!(4, services.len());
+        // 3 Depsfile + 2 Makefile
+        assert_eq!(5, services.len());
 
         // check for the '../directory' dependency from flutter assets
         let asset_deps = dependency::resolve(services, vec!["directory".to_string()], &all_opts)?;
@@ -1056,8 +1069,8 @@ mod tests {
         };
         let services = Service::discover(&all_opts)?;
 
-        // 2 Depsfile + 2 Makefile
-        assert_eq!(4, services.len());
+        // 3 Depsfile + 2 Makefile
+        assert_eq!(5, services.len());
 
         // check for the workspace 'pubspec.yaml' in the root folder
         let font_deps = dependency::resolve(services, vec!["pubspec.yaml".to_string()], &all_opts)?;
@@ -1078,8 +1091,8 @@ mod tests {
         };
         let services = Service::discover(&all_opts)?;
 
-        // 2 Depsfile + 2 Makefile
-        assert_eq!(4, services.len());
+        // 3 Depsfile + 2 Makefile
+        assert_eq!(5, services.len());
 
         // check for the '../fonts/Raleway.ttf' dependency from custom fonts
         let font_deps =
@@ -1097,8 +1110,8 @@ mod tests {
         let opts = mk_opts("./tests/examples/full")?;
         let services = Service::discover(&opts)?;
 
-        // 2 Depsfile
-        assert_eq!(2, services.len());
+        // 3 Depsfile
+        assert_eq!(3, services.len());
 
         let deps = dependency::resolve(services, vec!["Directory.Build.props".to_string()], &opts)?;
 
@@ -1114,8 +1127,8 @@ mod tests {
         let opts = mk_opts("./tests/examples/full")?;
         let services = Service::discover(&opts)?;
 
-        // 2 Depsfile
-        assert_eq!(2, services.len());
+        // 3 Depsfile
+        assert_eq!(3, services.len());
 
         let deps = dependency::resolve(services, vec!["global.json".to_string()], &opts)?;
 
@@ -1135,16 +1148,17 @@ mod tests {
         };
         let services = Service::discover(&all_opts)?;
 
-        // 2 Depsfile + 2 Makefile + 4 justfile
-        assert_eq!(8, services.len());
+        // 3 Depsfile + 2 Makefile + 4 justfile
+        assert_eq!(9, services.len());
 
         let deps = dependency::resolve(services, vec!["shared/something".to_string()], &all_opts)?;
 
         // - shared
         // - service-a
+        // - service-b
         // - service-c
-        assert_eq!(3, deps.len());
-        expect_output(deps, vec!["service-a", "service-c", "shared"])?;
+        assert_eq!(4, deps.len());
+        expect_output(deps, vec!["service-a", "service-c", "service-b", "shared"])?;
 
         Ok(())
     }
@@ -1177,8 +1191,8 @@ mod tests {
         };
         let services = Service::discover(&justfile_opts)?;
 
-        // 2 Depsfile + 4 justfile
-        assert_eq!(6, services.len());
+        // 3 Depsfile + 4 justfile
+        assert_eq!(7, services.len());
 
         let deps = dependency::resolve(
             services,
@@ -1202,8 +1216,8 @@ mod tests {
         };
         let services = Service::discover(&justfile_opts)?;
 
-        // 2 Depsfile + 4 justfile
-        assert_eq!(6, services.len());
+        // 3 Depsfile + 4 justfile
+        assert_eq!(7, services.len());
 
         let deps = dependency::resolve(
             services,
@@ -1220,6 +1234,23 @@ mod tests {
     }
 
     #[test]
+    fn resolve_dependencies_python() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let services = Service::discover(&opts)?;
+
+        // 3 Depsfile
+        assert_eq!(3, services.len());
+
+        let deps = dependency::resolve(services, vec!["python-lib/foo.py".to_string()], &opts)?;
+
+        // - service-h
+        assert_eq!(1, deps.len());
+        expect_output(deps, vec!["service-h"])?;
+
+        Ok(())
+    }
+
+    #[test]
     fn resolve_dependencies_k8s() -> Result<()> {
         let opts = mk_opts("./tests/examples/full")?;
         let justfile_opts = Opts {
@@ -1228,8 +1259,8 @@ mod tests {
         };
         let services = Service::discover(&justfile_opts)?;
 
-        // 2 Depsfile + 4 justfile
-        assert_eq!(6, services.len());
+        // 3 Depsfile + 4 justfile
+        assert_eq!(7, services.len());
 
         let deps = dependency::resolve(
             services,
@@ -1288,8 +1319,8 @@ mod tests {
         };
         let services = Service::discover(&all_opts)?;
 
-        // 2 Depsfile + 2 Makefile + 4 justfile
-        assert_eq!(8, services.len());
+        // 3 Depsfile + 2 Makefile + 4 justfile
+        assert_eq!(9, services.len());
 
         let deps = dependency::resolve(
             services,
@@ -1320,8 +1351,8 @@ mod tests {
         };
         let services = Service::discover(&all_opts)?;
 
-        // 2 Depsfile + 2 Makefile + 4 justfile
-        assert_eq!(8, services.len());
+        // 3 Depsfile + 2 Makefile + 4 justfile
+        assert_eq!(9, services.len());
 
         let deps = dependency::resolve(
             services,
@@ -1336,8 +1367,9 @@ mod tests {
         // - service-e
         // - service-f
         // - service-g
+        // - service-h
         // - shared
-        assert_eq!(8, deps.len());
+        assert_eq!(9, deps.len());
         expect_output(
             deps,
             vec![
@@ -1348,6 +1380,7 @@ mod tests {
                 "service-e",
                 "service-f",
                 "service-g",
+                "service-h",
                 "shared",
             ],
         )?;

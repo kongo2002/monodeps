@@ -1,0 +1,6 @@
+[project]
+name = "service-h"
+dependencies = ["python-lib", "requests"]
+
+[tool.uv.sources]
+python-lib = { workspace = true }

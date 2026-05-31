@@ -1,0 +1,6 @@
+[project]
+name = "service"
+dependencies = ["my-lib", "requests"]
+
+[tool.uv.sources]
+my-lib = { workspace = true }
