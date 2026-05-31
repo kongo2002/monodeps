@@ -87,6 +87,7 @@ impl Config {
             Language::Justfile => true,
             Language::Makefile => true,
             Language::Python => true,
+            Language::Rust => true,
         }
     }
 }
@@ -217,10 +218,11 @@ pub enum Language {
     Justfile,
     Makefile,
     Python,
+    Rust,
 }
 
 impl Language {
-    pub const VALUES: [Self; 9] = [
+    pub const VALUES: [Self; 10] = [
         Self::Golang,
         Self::Dotnet,
         Self::Flutter,
@@ -230,6 +232,7 @@ impl Language {
         Self::Justfile,
         Self::Makefile,
         Self::Python,
+        Self::Rust,
     ];
 }
 
@@ -245,6 +248,7 @@ impl Display for Language {
             Language::Justfile => f.write_str("justfile"),
             Language::Makefile => f.write_str("makefile"),
             Language::Python => f.write_str("python"),
+            Language::Rust => f.write_str("rust"),
         }
     }
 }
@@ -264,6 +268,7 @@ impl TryFrom<&str> for Language {
             "make" | "makefile" => Ok(Language::Makefile),
             "just" | "justfile" => Ok(Language::Justfile),
             "python" | "uv" => Ok(Language::Python),
+            "rust" | "cargo" => Ok(Language::Rust),
             unknown => Err(format!("unknown language: {}", unknown)),
         }
     }
