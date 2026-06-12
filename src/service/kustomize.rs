@@ -78,10 +78,10 @@ where
 
     let canonicalized = canonicalize(path.as_ref())?;
     if visited.contains(&canonicalized) {
-        return Err(anyhow!(
-            "cyclic dependency in kustomization '{}'",
-            path.as_ref().display()
-        ));
+        // this _could_ be a cyclic dependency but it is also possible to import the same
+        // kustomize component from multiple resources; that's why we don't throw an error
+        // but simply return whatever we found so far instead.
+        return Ok(Vec::new());
     }
     visited.insert(canonicalized);
 
@@ -395,15 +395,9 @@ resources:
         )?;
 
         let analyzer = KustomizeAnalyzer {};
-        let result = analyzer.dependencies(get_files(base_dir), base_dir.to_str().unwrap(), &opts);
+        let deps = analyzer.dependencies(get_files(base_dir), base_dir.to_str().unwrap(), &opts)?;
 
-        assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("cyclic dependency")
-        );
+        assert_eq!(distinct_deps(deps), 2);
 
         Ok(())
     }
