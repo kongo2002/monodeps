@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.8.0
+
+2026-07-23
+
+- feature: basic Rust support via `Cargo.toml`
+- feature: basic Python support via `uv`
+- improvement: more lenient handling of cyclic dependencies in kustomize
+  resources
+- improvement: fix `**` glob behavior
+- internal: upgrade dependencies
+
 
 ## 1.7.0
 
