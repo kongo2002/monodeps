@@ -1,6 +1,18 @@
 resolution: 'workspace'
 
 dependencies:
+  # this dependency must be ignored because tagged to a specific version
+  tagged_flutter:
+    git:
+      url: https://github.com/kongo2002/monodeps.git
+      tag_pattern: v{{version}}
+      path: tagged-flutter-lib/
+    version: ^2.0.1
+  # this dependency must be included
+  flutter_lib:
+    git:
+      url: https://github.com/kongo2002/monodeps.git
+      path: flutter-lib/
   shared_code:
     git:
       url: https://github.com/kongo2002/monodeps.git

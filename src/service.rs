@@ -1247,6 +1247,54 @@ mod tests {
     }
 
     #[test]
+    fn resolve_dependencies_flutter_git_deps_no_hit() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let justfile_opts = Opts {
+            supported_roots: vec![DepsfileType::Justfile, DepsfileType::Makefile],
+            ..opts
+        };
+        let services = Service::discover(&justfile_opts)?;
+
+        // 4 Depsfile + 4 justfile + 2 Makefile
+        assert_eq!(10, services.len());
+
+        let deps = dependency::resolve(
+            services,
+            vec!["tagged-flutter-lib/pubspec.yaml".to_string()],
+            &justfile_opts,
+        )?;
+
+        assert_eq!(0, deps.len());
+
+        Ok(())
+    }
+
+    #[test]
+    fn resolve_dependencies_flutter_git_deps_hit() -> Result<()> {
+        let opts = mk_opts("./tests/examples/full")?;
+        let justfile_opts = Opts {
+            supported_roots: vec![DepsfileType::Justfile, DepsfileType::Makefile],
+            ..opts
+        };
+        let services = Service::discover(&justfile_opts)?;
+
+        // 4 Depsfile + 4 justfile + 2 Makefile
+        assert_eq!(10, services.len());
+
+        let deps = dependency::resolve(
+            services,
+            vec!["flutter-lib/pubspec.yaml".to_string()],
+            &justfile_opts,
+        )?;
+
+        // - service-b
+        assert_eq!(1, deps.len());
+        expect_output(deps, vec!["service-b"])?;
+
+        Ok(())
+    }
+
+    #[test]
     fn resolve_dependencies_python() -> Result<()> {
         let opts = mk_opts("./tests/examples/full")?;
         let services = Service::discover(&opts)?;

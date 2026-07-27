@@ -224,13 +224,29 @@ fn find_local_dependencies(
         // afterwards we try git-path references
         // (only if there are git repositories configured)
         if has_git_repos {
+            let version = &value["version"].as_str().unwrap_or(empty);
+
             let git = &value["git"];
             let git_reference = git["url"].as_str().unwrap_or(empty);
+            let git_tag_pattern = git["tag_pattern"].as_str().unwrap_or(empty);
 
+            // when it is pinned to a specific version, we ignore
+            if !git_tag_pattern.is_empty() && !version.is_empty() {
+                continue;
+            }
+
+            // it has to be part of the configured git repositories to be considered
             if !git_repositories
                 .iter()
                 .any(|git_repo_candidate| git_reference.contains(git_repo_candidate))
             {
+                continue;
+            }
+
+            // this is a bit of a "heuristic":
+            // we only consider relevant if we assume a "main branch"
+            let git_ref = git["ref"].as_str().unwrap_or(empty);
+            if !git_ref.is_empty() && git_ref != "main" && git_ref != "master" {
                 continue;
             }
 
