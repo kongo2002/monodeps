@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.8.1
+
+2026-07-27
+
+- improvement: flutter git dependencies (introduced in 1.7.0) are more strict
+  now, only considering non-tagged dependencies
+
+
 ## 1.8.0
 
 2026-07-23
