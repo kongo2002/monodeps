@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{MAIN_SEPARATOR, Path};
 
 use anyhow::{Result, anyhow};
 use path_clean::PathClean;
@@ -51,9 +51,17 @@ pub fn canonicalize(path: &Path) -> Result<String> {
     Ok(canonical_str.to_owned())
 }
 
+/// Whether `path` is `dir` itself or lies below it, comparing whole path components so that
+/// `/a/bc` is not within `/a/b`.
+pub fn is_within(path: &str, dir: &str) -> bool {
+    path.strip_prefix(dir).is_some_and(|rest| {
+        rest.is_empty() || rest.starts_with(MAIN_SEPARATOR) || dir.ends_with(MAIN_SEPARATOR)
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::PathInfo;
+    use super::{PathInfo, is_within};
 
     use anyhow::Result;
 
@@ -121,5 +129,14 @@ mod tests {
 
         assert!(info.is_ok());
         assert_eq!(info.unwrap().canonicalized, absolute("./src/*"));
+    }
+
+    #[test]
+    fn is_within_components() {
+        assert!(is_within("/repo/lib", "/repo/lib"));
+        assert!(is_within("/repo/lib/x", "/repo/lib"));
+        assert!(is_within("/repo/lib", "/"));
+        assert!(!is_within("/repo/library/x", "/repo/lib"));
+        assert!(!is_within("/repo", "/repo/lib"));
     }
 }

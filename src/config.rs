@@ -5,7 +5,7 @@ use anyhow::{Result, anyhow};
 use regex::Regex;
 use yaml_rust2::Yaml;
 
-use crate::path::PathInfo;
+use crate::path::{PathInfo, is_within};
 use crate::utils::{load_yaml, yaml_str_list};
 
 #[derive(Default, Debug)]
@@ -152,21 +152,21 @@ impl DepPattern {
     pub fn is_match(&self, path: &str) -> bool {
         match &self.pattern {
             Some(patt) => patt.is_match(path),
-            None => path.starts_with(&self.raw.canonicalized),
+            None => is_within(path, &self.raw.canonicalized),
         }
     }
 
     pub fn is_matched_by(&self, path: &str) -> bool {
         match &self.pattern {
             Some(patt) => patt.is_match(path),
-            None => self.raw.canonicalized.starts_with(path),
+            None => is_within(&self.raw.canonicalized, path),
         }
     }
 
     pub fn is_child_of(&self, canonicalized_path: &str) -> bool {
         match &self.pattern {
             Some(_) => false,
-            None => self.raw.canonicalized.starts_with(canonicalized_path),
+            None => is_within(&self.raw.canonicalized, canonicalized_path),
         }
     }
 
