@@ -45,7 +45,6 @@ impl Opts {
         opts.optopt("o", "output", "output format [plain, yaml, json]", "FORMAT");
         opts.optflag("", "makefile", "accept 'Makefile' as project roots");
         opts.optflag("", "justfile", "accept 'justfile' as project roots");
-        opts.optflag("", "buildfile", "accept 'Buildfile.yaml' as project roots");
         opts.optflag("", "relative", "return relative paths");
         opts.optflag("", "all", "return all discovered services");
         opts.optflag("v", "verbose", "verbose output");
@@ -112,10 +111,6 @@ impl Opts {
 
         if matches.opt_present("justfile") {
             supported_roots.push(DepsfileType::Justfile);
-        }
-
-        if matches.opt_present("buildfile") {
-            supported_roots.push(DepsfileType::Buildfile);
         }
 
         let relative = matches.opt_present("relative");
@@ -215,15 +210,6 @@ mod tests {
         let (_operation, opts) = args(vec!["--makefile"])?;
 
         assert_eq!(true, opts.is_supported(&DepsfileType::Makefile));
-        assert_eq!(true, opts.is_supported(&DepsfileType::Depsfile));
-        Ok(())
-    }
-
-    #[test]
-    fn rootfile_buildfile() -> Result<()> {
-        let (_operation, opts) = args(vec!["--buildfile"])?;
-
-        assert_eq!(true, opts.is_supported(&DepsfileType::Buildfile));
         assert_eq!(true, opts.is_supported(&DepsfileType::Depsfile));
         Ok(())
     }

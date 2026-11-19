@@ -250,7 +250,6 @@ impl Service {
         let filename_candidates = vec![
             None,
             Some("Depsfile"),
-            Some("Buildfile.yaml"),
             Some("justfile"),
             Some("Makefile"),
         ];
@@ -274,7 +273,7 @@ impl Service {
     /// parsing of Depsfiles, auto-discovery the available languages and finally the auto-discovery
     /// of dependencies.
     fn discover_service(analyzer: &Analyzer, ctx: ServiceContext, opts: &Opts) -> Result<Service> {
-        // read/parse dependency file (depsfile, buildfile...) and extract
+        // read/parse dependency file (depsfile, justfile...) and extract
         // any potential explicitly listed dependencies
         let base_depsfile = Depsfile::load(
             ctx.filetype,
@@ -647,7 +646,6 @@ where
 fn map_depsfile(filename: &str, opts: &Opts) -> Option<DepsfileType> {
     let filetype = match filename {
         "Depsfile" => Some(DepsfileType::Depsfile),
-        "Buildfile.yaml" => Some(DepsfileType::Buildfile),
         "justfile" => Some(DepsfileType::Justfile),
         "Makefile" => Some(DepsfileType::Makefile),
         _ => None,
@@ -1355,10 +1353,9 @@ mod tests {
 
     #[test]
     fn merge_correct_filetype_order() {
-        assert_eq!(true, DepsfileType::Depsfile < DepsfileType::Buildfile);
         assert_eq!(true, DepsfileType::Depsfile < DepsfileType::Justfile);
         assert_eq!(true, DepsfileType::Depsfile < DepsfileType::Makefile);
-        assert_eq!(true, DepsfileType::Buildfile < DepsfileType::Justfile);
+        assert_eq!(true, DepsfileType::Justfile < DepsfileType::Makefile);
     }
 
     #[test]

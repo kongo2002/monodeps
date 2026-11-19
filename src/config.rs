@@ -277,7 +277,6 @@ impl TryFrom<&str> for Language {
 #[derive(Debug, PartialEq, PartialOrd)]
 pub enum DepsfileType {
     Depsfile,
-    Buildfile,
     Justfile,
     Makefile,
 }
@@ -300,10 +299,6 @@ impl Depsfile {
             DepsfileType::Depsfile => {
                 let config_yaml = load_yaml(&file)?;
                 Depsfile::depsfile_from_yaml(config_yaml, file, root_dir)
-            }
-            DepsfileType::Buildfile => {
-                let config_yaml = load_yaml(&file)?;
-                Depsfile::buildfile_from_yaml(config_yaml, file, root_dir)
             }
             DepsfileType::Justfile => Ok(Depsfile::empty()),
             DepsfileType::Makefile => Ok(Depsfile::empty()),
@@ -357,44 +352,6 @@ impl Depsfile {
                 }
             });
         }
-
-        Ok(Depsfile {
-            dependencies,
-            languages,
-        })
-    }
-
-    /// Try to parse the given `Yaml` into a valid `Config`
-    fn buildfile_from_yaml<P, R>(config_yaml: Yaml, file: P, root: R) -> Result<Depsfile>
-    where
-        P: AsRef<Path>,
-        R: AsRef<Path>,
-    {
-        let spec = &config_yaml["spec"];
-        let depends_on = &spec["dependsOn"];
-        let dep_patterns = yaml_str_list(depends_on);
-
-        let metadata = &config_yaml["metadata"];
-
-        let languages: Vec<Language> = metadata["builder"]
-            .as_str()
-            .map(|value| value.try_into().ok())
-            .into_iter()
-            .flatten()
-            .collect();
-
-        let dependencies = dep_patterns
-            .into_iter()
-            .flat_map(|dep| {
-                // NOTE: in the `Buildfile.yaml` the dependencies were always
-                // relative to the repository root
-                let dependency = DepPattern::new(&dep, &root);
-                if dependency.is_err() {
-                    log::warn!("{}: invalid dependency '{}'", file.as_ref().display(), dep);
-                }
-                dependency
-            })
-            .collect();
 
         Ok(Depsfile {
             dependencies,
@@ -590,56 +547,6 @@ dependencies:
             true,
             depsfile.dependencies[3].is_match("some/random/place/file.proto")
         );
-
-        Ok(())
-    }
-
-    #[test]
-    fn load_buildfile() -> Result<()> {
-        let dir = tmp()?;
-        let file_name = "Buildfile.yaml";
-
-        create_file(
-            &dir.path(),
-            file_name,
-            r#"
-spec:
-  dependsOn:
-    - ../shared/auth
-metadata:
-  builder: go
-"#,
-        )?;
-
-        let depsfile = Depsfile::load(DepsfileType::Buildfile, &dir.path().join(file_name), dir)?;
-
-        assert_eq!(vec![Language::Golang], depsfile.languages);
-        assert_eq!(1, depsfile.dependencies.len());
-
-        Ok(())
-    }
-
-    #[test]
-    fn load_buildfile_unknown_language() -> Result<()> {
-        let dir = tmp()?;
-        let file_name = "Buildfile.yaml";
-
-        create_file(
-            &dir.path(),
-            file_name,
-            r#"
-spec:
-  dependsOn:
-    - ../shared/auth
-metadata:
-  builder: whatever
-"#,
-        )?;
-
-        let depsfile = Depsfile::load(DepsfileType::Buildfile, &dir.path().join(file_name), dir)?;
-
-        assert_eq!(true, depsfile.languages.is_empty());
-        assert_eq!(1, depsfile.dependencies.len());
 
         Ok(())
     }

@@ -67,11 +67,6 @@ folder that contains either a `Makefile` or `justfile` as service roots
 respectively. Of course, in that case you are solely relying on the
 auto-discovery feature to determine dependencies.
 
-Similarly, `--buildfile` will consider every folder containing a
-`Buildfile.yaml` as service root. Its dependencies are read from
-`spec.dependsOn` (relative to the repository root) and the language from
-`metadata.builder`.
-
 If a folder contains multiple of these files, the `Depsfile` takes precedence.
 
 
