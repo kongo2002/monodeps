@@ -46,6 +46,7 @@ where
 {
     let mut imports = Vec::new();
     let mut in_imports = false;
+    let mut in_block_comment = false;
     let mut scanned_lines = 0usize;
 
     for line in lines {
@@ -54,21 +55,31 @@ where
             break;
         }
 
-        if in_imports {
+        let line = line.trim();
+
+        if in_block_comment {
+            in_block_comment = !line.contains("*/");
+        } else if in_imports {
             if line.contains(")") {
                 in_imports = false;
                 continue;
             }
 
-            if let Some(import) = extract_from_line(&line, config) {
+            if let Some(import) = extract_from_line(line, config) {
                 imports.push(import);
             }
         } else if line.starts_with("import (") {
             in_imports = true;
-        } else if line.starts_with("import")
-            && let Some(import) = extract_from_line(&line, config)
-        {
-            imports.push(import);
+        } else if line.starts_with("import") {
+            if let Some(import) = extract_from_line(line, config) {
+                imports.push(import);
+            }
+        } else if let Some(comment) = line.strip_prefix("/*") {
+            // cgo puts C code into a block comment right before `import "C"`
+            in_block_comment = !comment.contains("*/");
+        } else if !(line.is_empty() || line.starts_with("//") || line.starts_with("package")) {
+            // Go only permits imports before the first top-level declaration
+            break;
         }
     }
 
@@ -103,6 +114,7 @@ mod tests {
 
     const GO_IMPORT01: &str = include_str!("../../tests/resources/go_import01.go");
     const GO_IMPORT02: &str = include_str!("../../tests/resources/go_import02.go");
+    const GO_IMPORT03: &str = include_str!("../../tests/resources/go_import03.go");
 
     #[test]
     fn grouped_imports_with_matching_prefix() {
@@ -134,6 +146,19 @@ mod tests {
     fn single_imports_with_matching_prefix() {
         let imports = find_imports(
             GO_IMPORT02.lines().map(String::from),
+            &crate::config::GoConfig {
+                package_prefixes: vec![String::from("dev.azure.com/foo/bar")],
+            },
+        )
+        .unwrap();
+
+        assert_eq!(imports, vec!["pkg/some", "pkg/retry"]);
+    }
+
+    #[test]
+    fn imports_end_at_first_declaration() {
+        let imports = find_imports(
+            GO_IMPORT03.lines().map(String::from),
             &crate::config::GoConfig {
                 package_prefixes: vec![String::from("dev.azure.com/foo/bar")],
             },
