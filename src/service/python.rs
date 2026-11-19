@@ -5,7 +5,6 @@ use std::sync::OnceLock;
 
 use anyhow::{Result, anyhow};
 use serde::Deserialize;
-use walkdir::DirEntry;
 
 use crate::cli::Opts;
 use crate::config::DepPattern;
@@ -37,17 +36,12 @@ impl LanguageAnalyzer for PythonAnalyzer {
         file_name == "pyproject.toml"
     }
 
-    fn dependencies(
-        &self,
-        entries: Vec<DirEntry>,
-        dir: &str,
-        _opts: &Opts,
-    ) -> Result<Vec<DepPattern>> {
+    fn dependencies(&self, files: &[&Path], dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
         let mut deps = Vec::new();
         let all_packages = self.packages();
 
-        for entry in entries {
-            let pyproject = parse_pyproject(entry.path())?;
+        for file in files {
+            let pyproject = parse_pyproject(file)?;
 
             let sources = pyproject
                 .tool
@@ -197,14 +191,10 @@ mod tests {
         let opts = mk_opts(root);
         let analyzer = PythonAnalyzer::new(opts.target.clone());
 
-        let entries: Vec<_> = walkdir::WalkDir::new(&svc_dir)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_name().to_string_lossy() == "pyproject.toml")
-            .collect();
+        let pyproject = svc_dir.join("pyproject.toml");
 
         let deps = analyzer
-            .dependencies(entries, svc_dir.to_str().unwrap(), &opts)
+            .dependencies(&[pyproject.as_path()], svc_dir.to_str().unwrap(), &opts)
             .unwrap();
 
         assert_eq!(deps.len(), 1);
@@ -228,14 +218,10 @@ mod tests {
         let opts = mk_opts(root);
         let analyzer = PythonAnalyzer::new(opts.target.clone());
 
-        let entries: Vec<_> = walkdir::WalkDir::new(&svc_dir)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_name().to_string_lossy() == "pyproject.toml")
-            .collect();
+        let pyproject = svc_dir.join("pyproject.toml");
 
         let deps = analyzer
-            .dependencies(entries, svc_dir.to_str().unwrap(), &opts)
+            .dependencies(&[pyproject.as_path()], svc_dir.to_str().unwrap(), &opts)
             .unwrap();
 
         assert_eq!(deps.len(), 1);
@@ -259,14 +245,10 @@ mod tests {
         let opts = mk_opts(root);
         let analyzer = PythonAnalyzer::new(opts.target.clone());
 
-        let entries: Vec<_> = walkdir::WalkDir::new(&svc_dir)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_name().to_string_lossy() == "pyproject.toml")
-            .collect();
+        let pyproject = svc_dir.join("pyproject.toml");
 
         let deps = analyzer
-            .dependencies(entries, svc_dir.to_str().unwrap(), &opts)
+            .dependencies(&[pyproject.as_path()], svc_dir.to_str().unwrap(), &opts)
             .unwrap();
 
         assert!(deps.is_empty());
@@ -287,14 +269,10 @@ mod tests {
         let opts = mk_opts(root);
         let analyzer = PythonAnalyzer::new(opts.target.clone());
 
-        let entries: Vec<_> = walkdir::WalkDir::new(&svc_dir)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_name().to_string_lossy() == "pyproject.toml")
-            .collect();
+        let pyproject = svc_dir.join("pyproject.toml");
 
         let deps = analyzer
-            .dependencies(entries, svc_dir.to_str().unwrap(), &opts)
+            .dependencies(&[pyproject.as_path()], svc_dir.to_str().unwrap(), &opts)
             .unwrap();
 
         assert!(deps.is_empty());

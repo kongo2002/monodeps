@@ -1,7 +1,7 @@
 use std::collections::HashSet;
+use std::path::Path;
 
 use anyhow::Result;
-use walkdir::DirEntry;
 
 use crate::cli::Opts;
 use crate::config::{DepPattern, GoConfig};
@@ -17,16 +17,11 @@ impl LanguageAnalyzer for GoAnalyzer {
         file_name.ends_with(".go")
     }
 
-    fn dependencies(
-        &self,
-        entries: Vec<DirEntry>,
-        _dir: &str,
-        config: &Opts,
-    ) -> Result<Vec<DepPattern>> {
+    fn dependencies(&self, files: &[&Path], _dir: &str, config: &Opts) -> Result<Vec<DepPattern>> {
         let mut collected_imports = HashSet::new();
 
-        for entry in entries {
-            let lines = read_lines(entry.path())?.map_while(Result::ok);
+        for file in files {
+            let lines = read_lines(*file)?.map_while(Result::ok);
 
             collected_imports.extend(find_imports(lines, &config.config.auto_discovery.go)?);
         }

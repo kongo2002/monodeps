@@ -1,8 +1,8 @@
+use std::path::Path;
 use std::path::PathBuf;
 
 use anyhow::{Result, anyhow};
 use sxd_xpath::{Context, Factory, XPath};
-use walkdir::DirEntry;
 
 use crate::cli::Opts;
 use crate::config::DepPattern;
@@ -88,23 +88,15 @@ impl LanguageAnalyzer for DotnetAnalyzer {
         file_name.ends_with(".csproj")
     }
 
-    fn dependencies(
-        &self,
-        entries: Vec<DirEntry>,
-        dir: &str,
-        opts: &Opts,
-    ) -> Result<Vec<DepPattern>> {
+    fn dependencies(&self, files: &[&Path], dir: &str, opts: &Opts) -> Result<Vec<DepPattern>> {
         let mut collected_imports = Vec::new();
 
-        for entry in entries {
+        for file in files {
             if log::log_enabled!(log::Level::Debug) {
-                log::debug!(
-                    "dotnet: analyzing C# project file '{}'",
-                    entry.path().display()
-                );
+                log::debug!("dotnet: analyzing C# project file '{}'", file.display());
             }
 
-            let file_content = std::fs::read_to_string(entry.path())?;
+            let file_content = std::fs::read_to_string(*file)?;
 
             // the XML parser does not support UTF8 BOM
             let bom_stripped = file_content.trim_start_matches("\u{feff}");
@@ -114,7 +106,7 @@ impl LanguageAnalyzer for DotnetAnalyzer {
             )?;
 
             collected_imports.extend(imports.into_iter().flat_map(|import| {
-                parent_dir(entry.path())
+                parent_dir(file)
                     .and_then(|project_dir| DepPattern::plain(&import, &project_dir).ok())
             }));
         }

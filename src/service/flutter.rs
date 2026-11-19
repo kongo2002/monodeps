@@ -1,6 +1,5 @@
 use anyhow::Result;
 use std::path::{Path, PathBuf};
-use walkdir::DirEntry;
 use yaml_rust2::Yaml;
 
 use crate::cli::Opts;
@@ -101,28 +100,20 @@ impl LanguageAnalyzer for FlutterAnalyzer {
         file_name == "pubspec.yaml"
     }
 
-    fn dependencies(
-        &self,
-        entries: Vec<DirEntry>,
-        dir: &str,
-        opts: &Opts,
-    ) -> Result<Vec<DepPattern>> {
+    fn dependencies(&self, files: &[&Path], dir: &str, opts: &Opts) -> Result<Vec<DepPattern>> {
         let mut dependencies = Vec::new();
 
-        for entry in entries {
-            let pubspec_dir = match parent_dir(entry.path()) {
+        for file in files {
+            let pubspec_dir = match parent_dir(file) {
                 Some(d) => d,
                 None => continue,
             };
 
             if log::log_enabled!(log::Level::Debug) {
-                log::debug!(
-                    "flutter: analyzing dart pubspec file '{}'",
-                    entry.path().display()
-                );
+                log::debug!("flutter: analyzing dart pubspec file '{}'", file.display());
             }
 
-            let yaml = load_yaml(entry.path())?;
+            let yaml = load_yaml(*file)?;
             dependencies.extend(self.analyze_pubspec(
                 &yaml,
                 &pubspec_dir,

@@ -1,7 +1,6 @@
 use std::path::Path;
 
 use regex::Regex;
-use walkdir::DirEntry;
 
 use anyhow::Result;
 
@@ -54,16 +53,11 @@ impl LanguageAnalyzer for MakefileAnalyzer {
         file_name == "makefile"
     }
 
-    fn dependencies(
-        &self,
-        entries: Vec<DirEntry>,
-        _dir: &str,
-        _opts: &Opts,
-    ) -> Result<Vec<DepPattern>> {
+    fn dependencies(&self, files: &[&Path], _dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
         let mut dependencies = Vec::new();
 
-        for entry in entries {
-            dependencies.extend(self.extract_imports(entry.path())?);
+        for file in files {
+            dependencies.extend(self.extract_imports(*file)?);
         }
 
         Ok(dependencies)

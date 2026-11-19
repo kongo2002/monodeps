@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use std::path::Path;
 
 use anyhow::{Result, anyhow};
-use walkdir::DirEntry;
 
 use crate::cli::Opts;
 use crate::config::DepPattern;
@@ -18,21 +17,16 @@ impl LanguageAnalyzer for KustomizeAnalyzer {
         file_name == "kustomization.yaml" || file_name == "kustomization.yml"
     }
 
-    fn dependencies(
-        &self,
-        entries: Vec<DirEntry>,
-        dir: &str,
-        _opts: &Opts,
-    ) -> Result<Vec<DepPattern>> {
+    fn dependencies(&self, files: &[&Path], dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
         let mut collected_imports = Vec::new();
 
-        for entry in entries {
+        for file in files {
             if log::log_enabled!(log::Level::Debug) {
-                log::debug!("kustomization: analyzing file '{}'", entry.path().display());
+                log::debug!("kustomization: analyzing file '{}'", file.display());
             }
 
             let mut visited_files = HashSet::new();
-            let deps = parse_kustomization(entry.path(), dir, &mut visited_files)?;
+            let deps = parse_kustomization(*file, dir, &mut visited_files)?;
 
             collected_imports.extend(deps);
         }
@@ -144,7 +138,7 @@ where
 mod tests {
     use crate::config::{AutoDiscoveryConfig, Config, DotnetConfig, FlutterConfig, GoConfig};
     use crate::path::PathInfo;
-    use crate::service::non_hidden_files;
+    use crate::service::index::RepoIndex;
 
     use super::*;
     use std::fs::{self, File};
@@ -202,20 +196,14 @@ mod tests {
         Ok(opts)
     }
 
-    fn get_files(base_dir: &Path) -> Vec<DirEntry> {
+    fn discover(base_dir: &Path, opts: &Opts) -> Result<Vec<DepPattern>> {
         let analyzer = KustomizeAnalyzer {};
+        let index = RepoIndex::build(base_dir, |name| {
+            analyzer.file_relevant(&name.to_lowercase())
+        });
+        let files: Vec<_> = index.files().iter().map(|f| f.path.as_path()).collect();
 
-        non_hidden_files(base_dir)
-            .into_iter()
-            .filter(|entry| {
-                let file_name = match entry.file_name().to_str().map(|name| name.to_lowercase()) {
-                    Some(val) => val,
-                    None => return false,
-                };
-
-                analyzer.file_relevant(&file_name)
-            })
-            .collect()
+        analyzer.dependencies(&files, base_dir.to_str().unwrap(), opts)
     }
 
     #[test]
@@ -236,8 +224,7 @@ resources:
         File::create(base_dir.join("resource1.yaml"))?;
         File::create(base_dir.join("resource2.yaml"))?;
 
-        let analyzer = KustomizeAnalyzer {};
-        let deps = analyzer.dependencies(get_files(base_dir), base_dir.to_str().unwrap(), &opts)?;
+        let deps = discover(base_dir, &opts)?;
 
         // 2 resources + kustomization.yaml
         assert_eq!(distinct_deps(deps), 3);
@@ -272,8 +259,7 @@ resources:
         )?;
         File::create(sub_dir.join("sub_resource.yaml"))?;
 
-        let analyzer = KustomizeAnalyzer {};
-        let deps = analyzer.dependencies(get_files(base_dir), base_dir.to_str().unwrap(), &opts)?;
+        let deps = discover(base_dir, &opts)?;
 
         // 1 resource + 2 kustomization.yaml
         assert_eq!(distinct_deps(deps), 3);
@@ -323,8 +309,7 @@ resources:
         )?;
         File::create(component_dep_dir.join("component_resource.yaml"))?;
 
-        let analyzer = KustomizeAnalyzer {};
-        let deps = analyzer.dependencies(get_files(base_dir), base_dir.to_str().unwrap(), &opts)?;
+        let deps = discover(base_dir, &opts)?;
 
         // 3 resources + 2 kustomization.yaml
         assert_eq!(distinct_deps(deps), 5);
@@ -356,8 +341,7 @@ configMapGenerator:
         File::create(base_dir.join("patch2.yaml"))?;
         File::create(base_dir.join("config.properties"))?;
 
-        let analyzer = KustomizeAnalyzer {};
-        let deps = analyzer.dependencies(get_files(base_dir), base_dir.to_str().unwrap(), &opts)?;
+        let deps = discover(base_dir, &opts)?;
 
         // 3 resources + kustomization.yaml
         assert_eq!(distinct_deps(deps), 4);
@@ -394,8 +378,7 @@ resources:
             ),
         )?;
 
-        let analyzer = KustomizeAnalyzer {};
-        let deps = analyzer.dependencies(get_files(base_dir), base_dir.to_str().unwrap(), &opts)?;
+        let deps = discover(base_dir, &opts)?;
 
         assert_eq!(distinct_deps(deps), 2);
 
@@ -419,8 +402,7 @@ resources:
 "#,
         )?;
 
-        let analyzer = KustomizeAnalyzer {};
-        let deps = analyzer.dependencies(get_files(base_dir), base_dir.to_str().unwrap(), &opts)?;
+        let deps = discover(base_dir, &opts)?;
 
         assert_eq!(distinct_deps(deps), 1);
 
@@ -435,8 +417,7 @@ resources:
 
         create_kustomization(base_dir, "kustomization.yaml", "")?;
 
-        let analyzer = KustomizeAnalyzer {};
-        let deps = analyzer.dependencies(get_files(base_dir), base_dir.to_str().unwrap(), &opts)?;
+        let deps = discover(base_dir, &opts)?;
 
         assert_eq!(distinct_deps(deps), 1);
 
@@ -458,8 +439,7 @@ resources:
 "#,
         )?;
 
-        let analyzer = KustomizeAnalyzer {};
-        let deps = analyzer.dependencies(get_files(base_dir), base_dir.to_str().unwrap(), &opts)?;
+        let deps = discover(base_dir, &opts)?;
 
         assert_eq!(distinct_deps(deps), 1);
 

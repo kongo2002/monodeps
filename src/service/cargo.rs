@@ -1,8 +1,8 @@
 use std::fs;
+use std::path::Path;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use walkdir::DirEntry;
 
 use crate::cli::Opts;
 use crate::config::DepPattern;
@@ -16,25 +16,20 @@ impl LanguageAnalyzer for CargoAnalyzer {
         file_name == "cargo.toml"
     }
 
-    fn dependencies(
-        &self,
-        entries: Vec<DirEntry>,
-        _dir: &str,
-        _opts: &Opts,
-    ) -> Result<Vec<DepPattern>> {
+    fn dependencies(&self, files: &[&Path], _dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
         let mut deps = Vec::new();
 
-        for entry in entries {
-            let cargo_dir = match parent_dir(entry.path()) {
+        for file in files {
+            let cargo_dir = match parent_dir(file) {
                 Some(d) => d,
                 None => continue,
             };
 
             if log::log_enabled!(log::Level::Debug) {
-                log::debug!("cargo: analyzing Cargo.toml '{}'", entry.path().display());
+                log::debug!("cargo: analyzing Cargo.toml '{}'", file.display());
             }
 
-            let content = fs::read_to_string(entry.path())?;
+            let content = fs::read_to_string(*file)?;
             let value: toml::Value = content.parse()?;
 
             for section in &["dependencies", "dev-dependencies", "build-dependencies"] {
@@ -115,14 +110,7 @@ mod tests {
         fs::write(&path, cargo_toml)?;
 
         let opts = mk_opts(dir.path().to_str().unwrap())?;
-        let entry = walkdir::WalkDir::new(&path)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .next()
-            .unwrap();
-
-        let analyzer = CargoAnalyzer;
-        analyzer.dependencies(vec![entry], dir.path().to_str().unwrap(), &opts)
+        CargoAnalyzer.dependencies(&[path.as_path()], dir.path().to_str().unwrap(), &opts)
     }
 
     #[test]

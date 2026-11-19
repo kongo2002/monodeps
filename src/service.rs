@@ -16,6 +16,7 @@ use self::cargo::CargoAnalyzer;
 use self::dotnet::DotnetAnalyzer;
 use self::flutter::FlutterAnalyzer;
 use self::go::GoAnalyzer;
+use self::index::{IndexedFile, RepoIndex};
 use self::javascript::JavaScriptAnalyzer;
 use self::justfile::JustfileAnalyzer;
 use self::kustomize::KustomizeAnalyzer;
@@ -27,6 +28,7 @@ mod cargo;
 mod dotnet;
 mod flutter;
 mod go;
+mod index;
 mod javascript;
 mod justfile;
 mod kustomize;
@@ -76,13 +78,8 @@ impl Display for BuildTrigger {
 /// a given service directory.
 trait LanguageAnalyzer {
     /// Auto-discover all dependencies for the given service directory (`dir`) and using the
-    /// pre-discovered, relevant file entries (`entries`).
-    fn dependencies(
-        &self,
-        entries: Vec<DirEntry>,
-        dir: &str,
-        opts: &Opts,
-    ) -> Result<Vec<DepPattern>>;
+    /// pre-discovered, relevant `files`.
+    fn dependencies(&self, files: &[&Path], dir: &str, opts: &Opts) -> Result<Vec<DepPattern>>;
 
     /// Predicate to determine whether the given file name may be relevant for the
     /// `LanguageAnalyzer`. Will be potentially invoked for every file in the service directory,
@@ -110,39 +107,29 @@ impl Analyzer {
         Self { analyzers }
     }
 
-    /// Gather all files that are potentially of interest of any of the enabled language analyzers.
-    /// Like this we are traversing the service's directory structure only once, and can afterwards
-    /// pass the collected file entries for each language analyzer separately.
-    #[allow(clippy::borrowed_box)]
-    fn gather_file_candidates(
-        &self,
-        analyzers: &Vec<(&Language, &Box<dyn LanguageAnalyzer>)>,
-        dir: &str,
-    ) -> HashMap<Language, Vec<DirEntry>> {
-        let mut file_candidates = HashMap::new();
-
-        for entry in non_hidden_files(dir) {
-            let file_name = match entry.file_name().to_str().map(|name| name.to_lowercase()) {
-                Some(val) => val,
-                None => continue,
-            };
-
-            for (lang, analyzer) in analyzers {
-                if !analyzer.file_relevant(&file_name) {
-                    continue;
-                }
-
-                let lang_candidates = file_candidates.entry(**lang).or_insert_with(Vec::new);
-                lang_candidates.push(entry.clone());
+    /// Index all files below `root` that are either a service root or relevant to any of the
+    /// enabled language analyzers.
+    fn index(&self, root: &str, opts: &Opts) -> RepoIndex {
+        RepoIndex::build(root, |name| {
+            if map_depsfile(name, opts).is_some() {
+                return true;
             }
-        }
-
-        file_candidates
+            let lowercased = name.to_lowercase();
+            self.analyzers
+                .values()
+                .any(|analyzer| analyzer.file_relevant(&lowercased))
+        })
     }
 
     /// Collect all auto-discoverable dependencies for the specified languages in the given service
-    /// directory (`dir`).
-    fn discover(&self, languages: &[Language], dir: &str, opts: &Opts) -> Vec<AutoDependency> {
+    /// directory (`dir`), based on the service's indexed `files`.
+    fn discover(
+        &self,
+        languages: &[Language],
+        files: &[IndexedFile],
+        dir: &str,
+        opts: &Opts,
+    ) -> Vec<AutoDependency> {
         let analyzers: Vec<_> = languages
             .iter()
             .flat_map(|language| {
@@ -152,7 +139,17 @@ impl Analyzer {
             })
             .collect();
 
-        let mut file_candidates = self.gather_file_candidates(&analyzers, dir);
+        let mut file_candidates: HashMap<Language, Vec<&Path>> = HashMap::new();
+        for file in files {
+            for (language, analyzer) in &analyzers {
+                if analyzer.file_relevant(&file.name) {
+                    file_candidates
+                        .entry(**language)
+                        .or_default()
+                        .push(&file.path);
+                }
+            }
+        }
 
         analyzers
             .into_iter()
@@ -162,7 +159,7 @@ impl Analyzer {
                 let Some(relevant_files) = file_candidates.remove(language) else {
                     return Vec::new();
                 };
-                let result = analyzer.dependencies(relevant_files, dir, opts);
+                let result = analyzer.dependencies(&relevant_files, dir, opts);
 
                 match result {
                     Ok(deps) => deps
@@ -265,13 +262,19 @@ impl Service {
             .next()
             .ok_or_else(|| anyhow!("cannot find service root for: {}", path))?;
 
-        Service::discover_service(&analyzer, ctx, opts)
+        let index = analyzer.index(root_dir, opts);
+        Service::discover_service(&analyzer, &index, ctx, opts)
     }
 
     /// Run the main service discovery, meaning service root lookup (according to given `Opts`),
     /// parsing of Depsfiles, auto-discovery the available languages and finally the auto-discovery
     /// of dependencies.
-    fn discover_service(analyzer: &Analyzer, ctx: ServiceContext, opts: &Opts) -> Result<Service> {
+    fn discover_service(
+        analyzer: &Analyzer,
+        index: &RepoIndex,
+        ctx: ServiceContext,
+        opts: &Opts,
+    ) -> Result<Service> {
         // read/parse dependency file (depsfile, justfile...) and extract
         // any potential explicitly listed dependencies
         let depsfile = Depsfile::load(
@@ -288,7 +291,12 @@ impl Service {
 
         let mut unique_auto_dep_paths = HashSet::new();
         let auto_dependencies = analyzer
-            .discover(languages, &ctx.service_location.canonicalized, opts)
+            .discover(
+                languages,
+                index.within(&ctx.service_location.canonicalized),
+                &ctx.service_location.canonicalized,
+                opts,
+            )
             .into_iter()
             .filter(|auto_dep| {
                 // auto-discovered dependencies could be "anywhere", that's why we filter
@@ -317,11 +325,12 @@ impl Service {
     pub fn discover(opts: &Opts) -> Result<Vec<Service>> {
         let analyzer = Analyzer::new(opts);
         let root_dir = &opts.target.canonicalized;
+        let index = analyzer.index(root_dir, opts);
         let mut contexts = HashMap::new();
 
         // first we collect all "distinct" service contexts
-        for entry in non_hidden_files(root_dir) {
-            if let Some(ctx) = ServiceContext::from_depsfile(entry.into_path(), root_dir, opts) {
+        for file in index.files() {
+            if let Some(ctx) = ServiceContext::from_depsfile(file.path.clone(), root_dir, opts) {
                 // when the dependency file is directly in the project root there is no real
                 // reason to consider it because we would just return the full project
                 if ctx.service_location.canonicalized == *root_dir {
@@ -340,7 +349,7 @@ impl Service {
         // afterwards we are resolving all service contexts into actual services
         contexts
             .into_values()
-            .map(|ctx| Service::discover_service(&analyzer, ctx, opts))
+            .map(|ctx| Service::discover_service(&analyzer, &index, ctx, opts))
             .collect()
     }
 }

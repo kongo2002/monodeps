@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use walkdir::DirEntry;
 
 use crate::cli::Opts;
 use crate::config::DepPattern;
@@ -16,16 +15,11 @@ impl LanguageAnalyzer for JustfileAnalyzer {
         file_name == "justfile" || file_name.ends_with(".just")
     }
 
-    fn dependencies(
-        &self,
-        entries: Vec<DirEntry>,
-        _dir: &str,
-        _opts: &Opts,
-    ) -> Result<Vec<DepPattern>> {
+    fn dependencies(&self, files: &[&Path], _dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
         let mut dependencies = Vec::new();
 
-        for entry in entries {
-            dependencies.extend(extract_imports(entry.path())?);
+        for file in files {
+            dependencies.extend(extract_imports(*file)?);
         }
 
         Ok(dependencies)
