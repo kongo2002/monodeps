@@ -69,6 +69,9 @@ auto-discovery feature to determine dependencies.
 
 If a folder contains multiple of these files, the `Depsfile` takes precedence.
 
+Hidden files and directories are skipped, as well as everything excluded by
+`.gitignore` (inside a git repository) or `.ignore` files.
+
 
 ## Installation
 

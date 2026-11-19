@@ -1,10 +1,11 @@
-use std::path::{Path, PathBuf};
+use std::path::{MAIN_SEPARATOR_STR, Path, PathBuf};
+use std::sync::mpsc;
 
-use walkdir::{DirEntry, WalkDir};
+use ignore::{WalkBuilder, WalkState};
 
 /// All files of a directory tree that passed a name filter, collected in a single walk.
 pub(super) struct RepoIndex {
-    // sorted by path, so all files below a directory form a contiguous range
+    // sorted by path bytes, so all files sharing a directory prefix form a contiguous range
     files: Vec<IndexedFile>,
 }
 
@@ -21,23 +22,20 @@ impl RepoIndex {
         P: AsRef<Path>,
         F: Fn(&str) -> bool,
     {
-        let mut files: Vec<_> = non_hidden_files(root)
+        let mut files: Vec<_> = non_ignored_files(root)
             .into_iter()
-            .filter(|entry| !entry.file_type().is_dir())
-            .filter_map(|entry| {
-                let name = entry.file_name().to_str()?;
+            .filter_map(|path| {
+                let name = path.file_name()?.to_str()?;
                 if !keep(name) {
                     return None;
                 }
                 let name = name.to_lowercase();
-                Some(IndexedFile {
-                    path: entry.into_path(),
-                    name,
-                })
+                Some(IndexedFile { path, name })
             })
             .collect();
 
-        files.sort_unstable_by(|a, b| a.path.cmp(&b.path));
+        // byte-wise comparison is about 10x faster than the component-wise `Path` ordering
+        files.sort_unstable_by(|a, b| bytes(&a.path).cmp(bytes(&b.path)));
 
         Self { files }
     }
@@ -59,32 +57,53 @@ impl RepoIndex {
     where
         P: AsRef<Path>,
     {
-        let dir = dir.as_ref();
-        // `Path` compares by components, so `a/b/c` sorts between `a/b` and `a/b-c`
-        let start = self.files.partition_point(|f| f.path.as_path() < dir);
-        let len = self.files[start..].partition_point(|f| f.path.starts_with(dir));
+        // the trailing separator prevents `a/b` from matching files of its sibling `a/b-c`
+        let mut prefix = bytes(dir.as_ref()).to_vec();
+        if !prefix.ends_with(MAIN_SEPARATOR_STR.as_bytes()) {
+            prefix.extend_from_slice(MAIN_SEPARATOR_STR.as_bytes());
+        }
+
+        let start = self
+            .files
+            .partition_point(|f| bytes(&f.path) < prefix.as_slice());
+        let len = self.files[start..].partition_point(|f| bytes(&f.path).starts_with(&prefix));
 
         &self.files[start..start + len]
     }
 }
 
-/// Return a `DirEntry` iterator of all files and folders in the given directory (`dir`) that are
-/// not hidden or part of `node_modules`.
-fn non_hidden_files<P>(dir: P) -> impl IntoIterator<Item = DirEntry>
+fn bytes(path: &Path) -> &[u8] {
+    path.as_os_str().as_encoded_bytes()
+}
+
+/// Collect all non-directory paths below `dir` that are neither hidden nor excluded by
+/// `.gitignore` or `.ignore` files.
+fn non_ignored_files<P>(dir: P) -> Vec<PathBuf>
 where
     P: AsRef<Path>,
 {
-    WalkDir::new(dir)
-        .into_iter()
-        // filter hidden files/directories
-        .filter_entry(|e| {
-            !e.file_name()
-                .to_str()
-                .map(|s| s.starts_with(".") || s == "node_modules")
-                .unwrap_or(false)
-        })
-        // skip errors (e.g. non permission directories)
-        .filter_map(|e| e.ok())
+    let (tx, rx) = mpsc::channel();
+
+    WalkBuilder::new(dir)
+        // results must not depend on the local machine's git configuration
+        .git_global(false)
+        .git_exclude(false)
+        .build_parallel()
+        .run(|| {
+            let tx = tx.clone();
+            Box::new(move |entry| {
+                // skip errors (e.g. non permission directories)
+                if let Ok(entry) = entry
+                    && entry.file_type().is_some_and(|t| !t.is_dir())
+                {
+                    _ = tx.send(entry.into_path());
+                }
+                WalkState::Continue
+            })
+        });
+
+    drop(tx);
+    rx.into_iter().collect()
 }
 
 #[cfg(test)]
@@ -99,7 +118,7 @@ mod tests {
                 name: String::new(),
             })
             .collect();
-        files.sort_unstable_by(|a, b| a.path.cmp(&b.path));
+        files.sort_unstable_by(|a, b| bytes(&a.path).cmp(bytes(&b.path)));
         RepoIndex { files }
     }
 
@@ -117,5 +136,24 @@ mod tests {
         assert_eq!(vec!["/r/a/sub/z", "/r/a/x"], within(&idx, "/r/a"));
         assert_eq!(vec!["/r/a-b/y"], within(&idx, "/r/a-b"));
         assert!(within(&idx, "/r/c").is_empty());
+    }
+
+    #[test]
+    fn build_skips_hidden_and_gitignored_files() -> std::io::Result<()> {
+        let dir = tempfile::Builder::default().prefix("mdtest").tempdir()?;
+        let root = dir.path();
+        for sub in [".git", ".hidden", "ignored", "kept"] {
+            std::fs::create_dir(root.join(sub))?;
+        }
+        std::fs::write(root.join(".gitignore"), "ignored/\n")?;
+        for file in [".hidden/Depsfile", "ignored/Depsfile", "kept/Depsfile"] {
+            std::fs::write(root.join(file), "")?;
+        }
+
+        let idx = RepoIndex::build(root, |_| true);
+        let files: Vec<_> = idx.files().iter().map(|f| f.path.clone()).collect();
+
+        assert_eq!(vec![root.join("kept/Depsfile")], files);
+        Ok(())
     }
 }
