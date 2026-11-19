@@ -92,7 +92,7 @@ mod tests {
     fn new_path_info_non_existing_file() {
         let info = PathInfo::new("dir/does/not/exist", ".");
 
-        assert_eq!(info.is_ok(), true);
+        assert!(info.is_ok());
         assert_eq!(
             info.unwrap().canonicalized,
             absolute("./dir/does/not/exist")
@@ -103,7 +103,7 @@ mod tests {
     fn new_path_info_existing_file() {
         let info = PathInfo::new("src/cli.rs", ".");
 
-        assert_eq!(info.is_ok(), true);
+        assert!(info.is_ok());
         assert_eq!(info.unwrap().display_path, "src/cli.rs");
     }
 
@@ -111,7 +111,7 @@ mod tests {
     fn new_path_info_existing_file_unknown_root_dir() {
         let info = PathInfo::new("src/cli.rs", "/tmp/some/where");
 
-        assert_eq!(info.is_ok(), true);
+        assert!(info.is_ok());
         assert_eq!(info.unwrap().canonicalized, "/tmp/some/where/src/cli.rs");
     }
 
@@ -119,7 +119,7 @@ mod tests {
     fn new_path_info_wildcard_path() {
         let info = PathInfo::new("src/*", ".");
 
-        assert_eq!(info.is_ok(), true);
+        assert!(info.is_ok());
         assert_eq!(info.unwrap().canonicalized, absolute("./src/*"));
     }
 }

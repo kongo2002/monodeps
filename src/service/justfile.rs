@@ -112,19 +112,19 @@ mod tests {
     #[test]
     fn no_match_invalid() {
         let dir = Path::new("/tmp");
-        assert_eq!(None, extract("whatever this is", &dir));
+        assert_eq!(None, extract("whatever this is", dir));
     }
 
     #[test]
     fn no_match_import_not_beginning() {
         let dir = Path::new("/tmp");
-        assert_eq!(None, extract("whatever this import is", &dir));
+        assert_eq!(None, extract("whatever this import is", dir));
     }
 
     #[test]
     fn no_match_import_no_content() {
         let dir = Path::new("/tmp");
-        assert_eq!(None, extract("import '", &dir));
+        assert_eq!(None, extract("import '", dir));
     }
 
     #[test]
@@ -132,7 +132,7 @@ mod tests {
         let dir = Path::new("/tmp/some/where");
         assert_eq!(
             Some("/tmp/some/usr/share/justfile".to_string()),
-            extract("import '../usr/share/justfile'", &dir)
+            extract("import '../usr/share/justfile'", dir)
         );
     }
 }

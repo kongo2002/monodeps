@@ -65,8 +65,8 @@ pub fn resolve(
 
     // 5. return all services that have _some_ dependency
     Ok(service_map
-        .into_iter()
-        .filter_map(|(_, svc)| if svc.has_trigger() { Some(svc) } else { None })
+        .into_values()
+        .filter_map(|svc| if svc.has_trigger() { Some(svc) } else { None })
         .collect())
 }
 

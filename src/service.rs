@@ -247,12 +247,7 @@ impl Service {
         let analyzer = Analyzer::new(opts);
         let root_dir = &opts.target.canonicalized;
 
-        let filename_candidates = vec![
-            None,
-            Some("Depsfile"),
-            Some("justfile"),
-            Some("Makefile"),
-        ];
+        let filename_candidates = vec![None, Some("Depsfile"), Some("justfile"), Some("Makefile")];
 
         let ctx = filename_candidates
             .into_iter()
@@ -793,7 +788,7 @@ mod tests {
         let opts = mk_opts(".")?;
         let discovered = Service::try_determine("justfile", &opts);
 
-        assert_eq!(true, discovered.is_err());
+        assert!(discovered.is_err());
 
         Ok(())
     }
@@ -803,7 +798,7 @@ mod tests {
         let opts = mk_opts("./tests/examples/full")?;
         let discovered = Service::try_determine("./service-c/Depsfile", &opts);
 
-        assert_eq!(false, discovered.is_err());
+        assert!(!discovered.is_err());
 
         Ok(())
     }
@@ -817,7 +812,7 @@ mod tests {
         };
         let discovered = Service::try_determine("./tests/examples/full/service-a", &justfile_opts);
 
-        assert_eq!(false, discovered.is_err());
+        assert!(!discovered.is_err());
 
         Ok(())
     }
@@ -828,7 +823,7 @@ mod tests {
         let discovered = Service::try_determine("./tests/examples/full/service-a", &opts);
 
         // justfiles are not configured -> no service found
-        assert_eq!(true, discovered.is_err());
+        assert!(discovered.is_err());
 
         Ok(())
     }
@@ -838,7 +833,7 @@ mod tests {
         let opts = mk_opts(".")?;
         let discovered = Service::try_determine("./tests/examples/full/service-c", &opts);
 
-        assert_eq!(false, discovered.is_err());
+        assert!(!discovered.is_err());
 
         Ok(())
     }
@@ -848,7 +843,7 @@ mod tests {
         let opts = mk_opts(".")?;
         let discovered = Service::try_determine("./tests/examples/full/service-c/Depsfile", &opts);
 
-        assert_eq!(false, discovered.is_err());
+        assert!(!discovered.is_err());
 
         Ok(())
     }
@@ -858,7 +853,7 @@ mod tests {
         let opts = mk_opts("does_not_exist")?;
         let services = Service::discover(&opts)?;
 
-        assert_eq!(true, services.is_empty());
+        assert!(services.is_empty());
         Ok(())
     }
 
@@ -917,10 +912,7 @@ mod tests {
         // - proto/model.proto
         assert_eq!(3, service_g.auto_dependencies.len());
 
-        contains_auto_deps(
-            &service_g,
-            &vec!["api.proto", "common.proto", "model.proto"],
-        );
+        contains_auto_deps(&service_g, &["api.proto", "common.proto", "model.proto"]);
 
         Ok(())
     }
@@ -944,7 +936,7 @@ mod tests {
         // - pkg/some
         assert_eq!(2, service_a.auto_dependencies.len());
 
-        contains_auto_deps(&service_a, &vec!["shared/something", "pkg/some"]);
+        contains_auto_deps(&service_a, &["shared/something", "pkg/some"]);
 
         Ok(())
     }
@@ -973,7 +965,7 @@ mod tests {
 
         contains_auto_deps(
             &service_e,
-            &vec![
+            &[
                 "service-f",
                 "file-does-not-exist",
                 "just/lib.just",
@@ -1353,9 +1345,9 @@ mod tests {
 
     #[test]
     fn merge_correct_filetype_order() {
-        assert_eq!(true, DepsfileType::Depsfile < DepsfileType::Justfile);
-        assert_eq!(true, DepsfileType::Depsfile < DepsfileType::Makefile);
-        assert_eq!(true, DepsfileType::Justfile < DepsfileType::Makefile);
+        assert!(DepsfileType::Depsfile < DepsfileType::Justfile);
+        assert!(DepsfileType::Depsfile < DepsfileType::Makefile);
+        assert!(DepsfileType::Justfile < DepsfileType::Makefile);
     }
 
     #[test]

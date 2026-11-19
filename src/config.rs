@@ -451,7 +451,7 @@ mod tests {
         let config_name = "config.yaml";
 
         create_file(
-            &dir.path(),
+            dir.path(),
             config_name,
             r#"
 auto_discovery:
@@ -494,7 +494,7 @@ global_dependencies:
     fn load_depsfile_empty() {
         let depsfile = Depsfile::depsfile_from_yaml(Yaml::from_str(""), "/tmp/some/where", "/tmp");
 
-        assert_eq!(depsfile.is_ok(), true);
+        assert!(depsfile.is_ok());
     }
 
     #[test]
@@ -503,7 +503,7 @@ global_dependencies:
         let file_name = "Depsfile";
 
         create_file(
-            &dir.path(),
+            dir.path(),
             file_name,
             r#"
 languages:
@@ -520,33 +520,26 @@ dependencies:
 "#,
         )?;
 
-        let depsfile = Depsfile::load(DepsfileType::Depsfile, &dir.path().join(file_name), "/tmp")?;
+        let depsfile = Depsfile::load(DepsfileType::Depsfile, dir.path().join(file_name), "/tmp")?;
 
         assert_eq!(vec![Language::Golang, Language::Dotnet], depsfile.languages);
         assert_eq!(4, depsfile.dependencies.len());
 
         // `/Dockerfile`
-        assert_eq!(true, depsfile.dependencies[1].is_match("/tmp/Dockerfile"));
+        assert!(depsfile.dependencies[1].is_match("/tmp/Dockerfile"));
 
         // `.editorconfig`
         //   -> DOES NOT match from repository root
-        assert_eq!(
-            false,
-            depsfile.dependencies[2].is_match("/tmp/.editorconfig")
-        );
+        assert!(!depsfile.dependencies[2].is_match("/tmp/.editorconfig"));
 
         // `.editorconfig`
         //   -> DOES match from current directory
-        assert_eq!(
-            true,
-            depsfile.dependencies[2].is_match(&dir.path().join(".editorconfig").to_str().unwrap())
+        assert!(
+            depsfile.dependencies[2].is_match(dir.path().join(".editorconfig").to_str().unwrap())
         );
 
         // `.proto$`
-        assert_eq!(
-            true,
-            depsfile.dependencies[3].is_match("some/random/place/file.proto")
-        );
+        assert!(depsfile.dependencies[3].is_match("some/random/place/file.proto"));
 
         Ok(())
     }
@@ -556,62 +549,59 @@ dependencies:
         let mut docs = YamlLoader::load_from_str("spec:").unwrap();
         let config = Depsfile::depsfile_from_yaml(docs.remove(0), "/tmp/some/where", "/tmp");
 
-        assert_eq!(config.is_ok(), true);
+        assert!(config.is_ok());
     }
 
     #[test]
     fn dep_pattern_basic() {
         let pat = DepPattern::new("domains/foo", ".").unwrap();
 
-        assert_eq!(pat.is_match(&absolute("./domains/foo/something")), true);
-        assert_eq!(pat.is_match("./domains/else/foo"), false);
+        assert!(pat.is_match(&absolute("./domains/foo/something")));
+        assert!(!pat.is_match("./domains/else/foo"));
     }
 
     #[test]
     fn dep_pattern_wildcard() {
         let pat = DepPattern::new("domains/foo/services/*/proto", ".").unwrap();
 
-        assert_eq!(pat.is_match("./domains/foo/services/bar/proto"), true);
-        assert_eq!(pat.is_match("./domains/bar/services/bar/proto"), false);
+        assert!(pat.is_match("./domains/foo/services/bar/proto"));
+        assert!(!pat.is_match("./domains/bar/services/bar/proto"));
     }
 
     #[test]
     fn dep_pattern_dot() {
         let pat = DepPattern::new("domains/foo/services/.hidden", ".").unwrap();
 
-        assert_eq!(
-            pat.is_match(&absolute("./domains/foo/services/.hidden/stuff")),
-            true
-        );
-        assert_eq!(pat.is_match("./domains/foo/services/xhidden/stuff"), false);
+        assert!(pat.is_match(&absolute("./domains/foo/services/.hidden/stuff")));
+        assert!(!pat.is_match("./domains/foo/services/xhidden/stuff"));
     }
 
     #[test]
     fn dep_pattern_wildcard_dot() {
         let pat = DepPattern::new("domains/foo/*/.hidden", ".").unwrap();
 
-        assert_eq!(pat.is_match("./domains/foo/services/.hidden/stuff"), true);
-        assert_eq!(pat.is_match("./domains/foo/services/xhidden/stuff"), false);
+        assert!(pat.is_match("./domains/foo/services/.hidden/stuff"));
+        assert!(!pat.is_match("./domains/foo/services/xhidden/stuff"));
     }
 
     #[test]
     fn dep_pattern_wildcard_question_mark() {
         let pat = DepPattern::new("domains/foo/??hidden", ".").unwrap();
 
-        assert_eq!(pat.is_match("./domains/foo/.xhidden/stuff"), true);
-        assert_eq!(pat.is_match("./domains/foo/.hidden/stuff"), false);
+        assert!(pat.is_match("./domains/foo/.xhidden/stuff"));
+        assert!(!pat.is_match("./domains/foo/.hidden/stuff"));
     }
 
     #[test]
     fn dep_pattern_regex() {
         let pat = DepPattern::regex("\\.proto$", ".").unwrap();
 
-        assert_eq!(pat.is_match("./domains/foo/services/file.proto"), true);
-        assert_eq!(pat.is_match("./domains/foo/services/proto"), false);
-        assert_eq!(pat.is_match("./domains/foo/services/file.proto/foo"), false);
+        assert!(pat.is_match("./domains/foo/services/file.proto"));
+        assert!(!pat.is_match("./domains/foo/services/proto"));
+        assert!(!pat.is_match("./domains/foo/services/file.proto/foo"));
 
-        assert_eq!(pat.is_matched_by("./domains/foo/services/file.proto"), true);
-        assert_eq!(pat.is_child_of("./domains/foo/services/file.proto"), false);
+        assert!(pat.is_matched_by("./domains/foo/services/file.proto"));
+        assert!(!pat.is_child_of("./domains/foo/services/file.proto"));
     }
 
     #[test]
@@ -620,7 +610,7 @@ dependencies:
             let formatted = format!("{}", language);
             let parsed: Option<Language> = formatted.as_str().try_into().ok();
 
-            assert_eq!(true, parsed.is_some(), "parsing '{formatted}'");
+            assert!(parsed.is_some(), "parsing '{formatted}'");
             assert_eq!(language, parsed.unwrap(), "parsing '{formatted}'");
         }
     }

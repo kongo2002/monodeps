@@ -200,8 +200,8 @@ mod tests {
     fn rootfile_justfile() -> Result<()> {
         let (_operation, opts) = args(vec!["--justfile"])?;
 
-        assert_eq!(true, opts.is_supported(&DepsfileType::Justfile));
-        assert_eq!(true, opts.is_supported(&DepsfileType::Depsfile));
+        assert!(opts.is_supported(&DepsfileType::Justfile));
+        assert!(opts.is_supported(&DepsfileType::Depsfile));
         Ok(())
     }
 
@@ -209,8 +209,8 @@ mod tests {
     fn rootfile_makefile() -> Result<()> {
         let (_operation, opts) = args(vec!["--makefile"])?;
 
-        assert_eq!(true, opts.is_supported(&DepsfileType::Makefile));
-        assert_eq!(true, opts.is_supported(&DepsfileType::Depsfile));
+        assert!(opts.is_supported(&DepsfileType::Makefile));
+        assert!(opts.is_supported(&DepsfileType::Depsfile));
         Ok(())
     }
 
@@ -242,7 +242,7 @@ mod tests {
     fn output_format_invalid() -> Result<()> {
         let parsed = args(vec!["-o", "unknown"]);
 
-        assert_eq!(true, parsed.is_err());
+        assert!(parsed.is_err());
         Ok(())
     }
 
