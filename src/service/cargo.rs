@@ -37,7 +37,7 @@ impl LanguageAnalyzer for CargoAnalyzer {
             }
 
             let content = fs::read_to_string(*file)?;
-            let value: toml::Value = content.parse()?;
+            let value: toml::Table = content.parse()?;
 
             for section in &["dependencies", "dev-dependencies", "build-dependencies"] {
                 if let Some(table) = value.get(*section) {
