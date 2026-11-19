@@ -50,10 +50,10 @@ of "accuracy"):
  | Python       | basic      | `uv` path and workspace sources in `pyproject.toml`                     |
  | Javascript   | very basic | workspace support                                                       |
 
-By default, *monodeps* will try to auto-detect the mentioned language/frameworks
-based on the present files and file types. Once detected, the language specific
-dependency discovery will attempt to automatically add dependencies to the ones
-that are explicitly listed in the `Depsfile`.
+By default, *monodeps* runs the dependency discovery of every language/framework
+whose relevant files (e.g. `*.csproj`, `pubspec.yaml`, `*.go`) are present in a
+service directory. The discovered dependencies are added to the ones that are
+explicitly listed in the `Depsfile`.
 
 
 ### Service discovery
@@ -105,10 +105,9 @@ dependencies:
   # alternatively you can also specify a regex:
   - regex: '\.proto$'
 
-# Specifying the language of the respective service helps monodeps to know what
-# files to look for in terms of auto-discovering dependencies. Otherwise,
-# monodeps will try to guess the language based on the majority of files in the
-# service directory.
+# Optionally you can restrict the auto-discovery of dependencies to the listed
+# languages. Otherwise, all languages with relevant files present in the
+# service directory are considered.
 #
 # Currently supported: go/golang, csharp/dotnet, dart/flutter, kustomize,
 #                      js/javascript, proto, justfile, makefile,

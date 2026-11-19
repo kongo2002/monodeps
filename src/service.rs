@@ -157,7 +157,11 @@ impl Analyzer {
         analyzers
             .into_iter()
             .flat_map(|(language, analyzer)| {
-                let relevant_files = file_candidates.remove(language).unwrap_or_default();
+                // some analyzers add dependencies regardless of their input files (e.g.
+                // `global.json` in dotnet), so they must only run on services they apply to
+                let Some(relevant_files) = file_candidates.remove(language) else {
+                    return Vec::new();
+                };
                 let result = analyzer.dependencies(relevant_files, dir, opts);
 
                 match result {
@@ -270,24 +274,21 @@ impl Service {
     fn discover_service(analyzer: &Analyzer, ctx: ServiceContext, opts: &Opts) -> Result<Service> {
         // read/parse dependency file (depsfile, justfile...) and extract
         // any potential explicitly listed dependencies
-        let base_depsfile = Depsfile::load(
+        let depsfile = Depsfile::load(
             ctx.filetype,
             &ctx.depsfile_location.canonicalized,
             &opts.target.canonicalized,
         )?;
 
-        // try to determine what languages we can auto-discover
-        let depsfile = auto_discover_languages(base_depsfile, &ctx.service_location);
+        let languages: &[Language] = if depsfile.languages.is_empty() {
+            &Language::VALUES
+        } else {
+            &depsfile.languages
+        };
 
-        // try to determine all dependencies of languages we detected
-        // in this service folder
         let mut unique_auto_dep_paths = HashSet::new();
         let auto_dependencies = analyzer
-            .discover(
-                &depsfile.languages,
-                &ctx.service_location.canonicalized,
-                opts,
-            )
+            .discover(languages, &ctx.service_location.canonicalized, opts)
             .into_iter()
             .filter(|auto_dep| {
                 // auto-discovered dependencies could be "anywhere", that's why we filter
@@ -346,138 +347,6 @@ impl Service {
 
 fn not_within_service(service_dir: &PathInfo, pattern: &DepPattern) -> bool {
     !pattern.is_child_of(&service_dir.canonicalized)
-}
-
-/// Try to auto-discover the languages available in the given service directory (at `path`). The
-/// languages discovery is skipped if the Depsfile lists languages explicitly.
-fn auto_discover_languages(depsfile: Depsfile, path: &PathInfo) -> Depsfile {
-    if !depsfile.languages.is_empty() {
-        return depsfile;
-    }
-
-    let mut filetype_frequencies = HashMap::new();
-
-    for entry in non_hidden_files(&path.canonicalized) {
-        if let Some(lang) = try_determine_language(&entry) {
-            let val = filetype_frequencies.entry(lang.language).or_insert(0);
-            *val += lang.score;
-        }
-    }
-
-    let languages = filetype_frequencies
-        .into_iter()
-        .filter(|(_, score)| *score >= 3)
-        .map(|tpl| tpl.0)
-        .collect();
-
-    Depsfile {
-        languages,
-        ..depsfile
-    }
-}
-
-struct LanguageMatch {
-    language: Language,
-    score: i32,
-}
-
-/// Try to map the given file/directory entry to a `Language` and a "score".
-fn try_determine_language(entry: &DirEntry) -> Option<LanguageMatch> {
-    let extension = entry.path().extension().and_then(|ext| ext.to_str());
-
-    match extension {
-        Some("cs") => {
-            return Some(LanguageMatch {
-                language: Language::Dotnet,
-                score: 1,
-            });
-        }
-        Some("csproj") => {
-            return Some(LanguageMatch {
-                language: Language::Dotnet,
-                score: 5,
-            });
-        }
-        Some("go") => {
-            return Some(LanguageMatch {
-                language: Language::Golang,
-                score: 1,
-            });
-        }
-        Some("dart") => {
-            return Some(LanguageMatch {
-                language: Language::Flutter,
-                score: 1,
-            });
-        }
-        Some("proto") => {
-            return Some(LanguageMatch {
-                language: Language::Protobuf,
-                score: 3,
-            });
-        }
-        Some("just") => {
-            return Some(LanguageMatch {
-                language: Language::Justfile,
-                score: 3,
-            });
-        }
-        Some("js" | "jsx" | "tsx" | "ts") => {
-            return Some(LanguageMatch {
-                language: Language::JavaScript,
-                score: 1,
-            });
-        }
-        Some("py") => {
-            return Some(LanguageMatch {
-                language: Language::Python,
-                score: 1,
-            });
-        }
-        Some("rs") => {
-            return Some(LanguageMatch {
-                language: Language::Rust,
-                score: 1,
-            });
-        }
-        _ => {}
-    }
-
-    match entry.file_name().to_str().unwrap_or_default() {
-        "pubspec.yaml" | "pubspec.lock" => Some(LanguageMatch {
-            language: Language::Flutter,
-            score: 5,
-        }),
-        "go.mod" | "go.sum" => Some(LanguageMatch {
-            language: Language::Golang,
-            score: 5,
-        }),
-        "kustomization.yaml" | "kustomization.yml" => Some(LanguageMatch {
-            language: Language::Kustomize,
-            score: 5,
-        }),
-        "package.json" => Some(LanguageMatch {
-            language: Language::JavaScript,
-            score: 5,
-        }),
-        "justfile" => Some(LanguageMatch {
-            language: Language::Justfile,
-            score: 5,
-        }),
-        "Makefile" => Some(LanguageMatch {
-            language: Language::Makefile,
-            score: 5,
-        }),
-        "pyproject.toml" => Some(LanguageMatch {
-            language: Language::Python,
-            score: 5,
-        }),
-        "Cargo.toml" => Some(LanguageMatch {
-            language: Language::Rust,
-            score: 5,
-        }),
-        _ => None,
-    }
 }
 
 /// Return a `DirEntry` iterator of all files and folders in the given directory (`dir`) that are
