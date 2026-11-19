@@ -46,6 +46,8 @@ of "accuracy"):
  | Go           | good       | regex based, requires common prefix/namespace configuration             |
  | Protobuf     | good       | regex/prefix based support for imports                                  |
  | Makefile     | basic      | support for includes (no variable expansion though)                     |
+ | Rust         | basic      | path dependencies in `Cargo.toml` (including workspace dependencies)    |
+ | Python       | basic      | `uv` path and workspace sources in `pyproject.toml`                     |
  | Javascript   | very basic | workspace support                                                       |
 
 By default, *monodeps* will try to auto-detect the mentioned language/frameworks
@@ -64,6 +66,13 @@ Moreover you can toggle via `--makefile` and `--justfile` to also consider every
 folder that contains either a `Makefile` or `justfile` as service roots
 respectively. Of course, in that case you are solely relying on the
 auto-discovery feature to determine dependencies.
+
+Similarly, `--buildfile` will consider every folder containing a
+`Buildfile.yaml` as service root. Its dependencies are read from
+`spec.dependsOn` (relative to the repository root) and the language from
+`metadata.builder`.
+
+If a folder contains multiple of these files, the `Depsfile` takes precedence.
 
 
 ## Installation
@@ -107,7 +116,8 @@ dependencies:
 # service directory.
 #
 # Currently supported: go/golang, csharp/dotnet, dart/flutter, kustomize,
-#                      js/javascript, proto, justfile, makefile
+#                      js/javascript, proto, justfile, makefile,
+#                      python/uv, rust/cargo
 languages:
   - go
 ```
