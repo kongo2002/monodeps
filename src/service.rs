@@ -259,32 +259,6 @@ impl Service {
         self.trigger.replace(trigger);
     }
 
-    /// Attempt to discover a `Service` using the specified `path`. The `path` is either a service
-    /// "root" file itself, or its parent directory. This will also discover the service, meaning
-    /// running any auto-discovery if possible.
-    /// This method will respect the enabled service roots and options in general, via `Opts`.
-    pub fn try_determine(path: &str, opts: &Opts) -> Result<Service> {
-        let analyzer = Analyzer::new(opts);
-        let root_dir = &opts.target.canonicalized;
-
-        let filename_candidates = vec![None, Some("Depsfile"), Some("justfile"), Some("Makefile")];
-
-        let ctx = filename_candidates
-            .into_iter()
-            .flat_map(|filename| {
-                let full_path = match filename {
-                    None => PathBuf::from(root_dir).join(path),
-                    Some(file) => PathBuf::from(root_dir).join(path).join(file),
-                };
-                ServiceContext::from_depsfile(full_path, root_dir, opts)
-            })
-            .next()
-            .ok_or_else(|| anyhow!("cannot find service root for: {}", path))?;
-
-        let index = analyzer.index(root_dir, opts);
-        Service::discover_service(&analyzer, &index, ctx, opts)
-    }
-
     /// Run the main service discovery, meaning service root lookup (according to given `Opts`),
     /// parsing of Depsfiles, auto-discovery the available languages and finally the auto-discovery
     /// of dependencies.
@@ -319,7 +293,7 @@ impl Service {
                     // moreover we filter out all obvious duplicates
                     && auto_dep
                         .pattern
-                        .hash()
+                        .plain_path()
                         .map(|hash| unique_auto_dep_paths.insert(hash.to_owned()))
                         .unwrap_or(true)
             })
@@ -577,7 +551,9 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::io::Cursor;
+    use std::path::Path;
 
     use anyhow::{Result, anyhow};
 
@@ -654,71 +630,6 @@ mod tests {
                 dep
             );
         }
-    }
-
-    #[test]
-    fn try_determine_does_not_exist() -> Result<()> {
-        let opts = mk_opts(".")?;
-        let discovered = Service::try_determine("justfile", &opts);
-
-        assert!(discovered.is_err());
-
-        Ok(())
-    }
-
-    #[test]
-    fn try_determine_direct_file_target_dir() -> Result<()> {
-        let opts = mk_opts("./tests/examples/full")?;
-        let discovered = Service::try_determine("./service-c/Depsfile", &opts);
-
-        assert!(!discovered.is_err());
-
-        Ok(())
-    }
-
-    #[test]
-    fn try_determine_without_file_justfile() -> Result<()> {
-        let opts = mk_opts(".")?;
-        let justfile_opts = Opts {
-            supported_roots: vec![DepsfileType::Justfile],
-            ..opts
-        };
-        let discovered = Service::try_determine("./tests/examples/full/service-a", &justfile_opts);
-
-        assert!(!discovered.is_err());
-
-        Ok(())
-    }
-
-    #[test]
-    fn try_determine_without_file_justfile_not_configured() -> Result<()> {
-        let opts = mk_opts(".")?;
-        let discovered = Service::try_determine("./tests/examples/full/service-a", &opts);
-
-        // justfiles are not configured -> no service found
-        assert!(discovered.is_err());
-
-        Ok(())
-    }
-
-    #[test]
-    fn try_determine_without_file() -> Result<()> {
-        let opts = mk_opts(".")?;
-        let discovered = Service::try_determine("./tests/examples/full/service-c", &opts);
-
-        assert!(!discovered.is_err());
-
-        Ok(())
-    }
-
-    #[test]
-    fn try_determine_direct_file() -> Result<()> {
-        let opts = mk_opts(".")?;
-        let discovered = Service::try_determine("./tests/examples/full/service-c/Depsfile", &opts);
-
-        assert!(!discovered.is_err());
-
-        Ok(())
     }
 
     #[test]
@@ -1055,6 +966,59 @@ mod tests {
         assert_eq!(3, deps.len());
         expect_output(deps, vec!["service", "lib-a", "lib-b"])?;
 
+        Ok(())
+    }
+
+    fn peer_services() -> Result<(Opts, HashMap<String, Service>)> {
+        let opts = mk_opts("./tests/examples/peer")?;
+        let services = Service::discover(&opts)?
+            .into_iter()
+            .map(|svc| (svc.path.canonicalized.clone(), svc))
+            .collect();
+
+        Ok((opts, services))
+    }
+
+    fn peer_dependency_names(name: &str) -> Result<Vec<String>> {
+        let (opts, services) = peer_services()?;
+        let service = &services[&format!("{}/{name}", opts.target.canonicalized)];
+
+        let mut names: Vec<_> = dependency::service_dependencies(&services, service)
+            .into_iter()
+            .map(|svc| svc.path.relative_to(&opts.target))
+            .collect();
+        names.sort();
+
+        Ok(names)
+    }
+
+    #[test]
+    fn service_dependencies_transitive() -> Result<()> {
+        assert_eq!(
+            vec!["./lib-a", "./lib-b"],
+            peer_dependency_names("service")?
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn service_dependencies_none() -> Result<()> {
+        assert!(peer_dependency_names("lib-b")?.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn owning_service_nested_path() -> Result<()> {
+        let (opts, services) = peer_services()?;
+        let root = &opts.target.canonicalized;
+        let path = PathInfo::new("lib-a/src/deep/file", root)?;
+
+        let owner = dependency::owning_service(&services, Path::new(&path.canonicalized), root)?;
+
+        assert_eq!(
+            Some("./lib-a".to_string()),
+            owner.map(|svc| svc.path.relative_to(&opts.target))
+        );
         Ok(())
     }
 

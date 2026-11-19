@@ -170,7 +170,7 @@ impl DepPattern {
         }
     }
 
-    pub fn hash(&self) -> Option<&str> {
+    pub fn plain_path(&self) -> Option<&str> {
         match self.pattern {
             Some(_) => None,
             None => Some(&self.raw.canonicalized),

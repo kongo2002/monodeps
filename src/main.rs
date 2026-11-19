@@ -1,10 +1,14 @@
 use std::borrow::Cow;
-use std::io::BufRead;
+use std::collections::HashMap;
+use std::io::{BufRead, Write};
+use std::path::Path;
 
 use self::cli::{Operation, Opts, OutputFormat};
+use self::config::{DepPattern, Language};
+use self::path::PathInfo;
 use self::service::Service;
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use env_logger::Env;
 use yaml_rust2::{Yaml, YamlEmitter};
 
@@ -76,40 +80,111 @@ where
 
 /// Run the 'validate' operation of monodeps.
 ///
-/// It will discover a service in the given target directory and determine all services, folder and
-/// files that service is depending on.
+/// It will discover the service owning the given path and print all its dependencies, including
+/// the services it depends on directly or transitively.
 fn validate(service_path: &str, opts: Opts) {
-    match service::Service::try_determine(service_path, &opts) {
-        Ok(svc) => {
-            if !svc.depsfile.dependencies.is_empty() {
-                println!("Dependencies (configured):");
+    if let Err(err) = write_validation(std::io::stdout(), service_path, &opts) {
+        eprintln!("failed to validate service dependencies: {err}");
+        std::process::exit(1);
+    }
+}
 
-                for dependency in svc.depsfile.dependencies {
-                    println!("  - {}", dependency);
-                }
-            }
+fn write_validation<W>(mut w: W, service_path: &str, opts: &Opts) -> Result<()>
+where
+    W: Write,
+{
+    // same discovery and lookup as change detection, so both always agree on the service
+    let services: HashMap<_, _> = Service::discover(opts)?
+        .into_iter()
+        .map(|svc| (svc.path.canonicalized.clone(), svc))
+        .collect();
+    let root = &opts.target.canonicalized;
+    let path = PathInfo::new(service_path, root)?;
+    let service = dependency::owning_service(&services, Path::new(&path.canonicalized), root)?
+        .ok_or_else(|| anyhow!("cannot find service for: {service_path}"))?;
 
-            if !svc.auto_dependencies.is_empty() {
-                println!("Dependencies (auto-discovered):");
+    let peers_of = |dep: &DepPattern| -> Vec<Cow<str>> {
+        let mut peers: Vec<_> = services
+            .values()
+            .filter(|other| {
+                other.path.canonicalized != service.path.canonicalized
+                    && dep.is_matched_by(&other.path.canonicalized)
+            })
+            .map(|other| service_loc(other, opts))
+            .collect();
+        peers.sort();
+        peers
+    };
 
-                for dependency in svc.auto_dependencies {
-                    println!("  - {} [{}]", dependency.pattern, dependency.language);
-                }
-            }
+    writeln!(w, "Service: {}", service_loc(service, opts))?;
 
-            if !opts.config.global_dependencies.is_empty() {
-                println!("Dependencies (global):");
-
-                for dependency in opts.config.global_dependencies {
-                    println!("  - {}", dependency);
-                }
-            }
-        }
-        Err(err) => {
-            eprintln!("failed validate service dependencies: {err}");
-            std::process::exit(1);
+    if !service.depsfile.dependencies.is_empty() {
+        writeln!(w, "Dependencies (configured):")?;
+        for dep in &service.depsfile.dependencies {
+            write_dependency(&mut w, dep, None, &peers_of(dep), opts)?;
         }
     }
+
+    if !service.auto_dependencies.is_empty() {
+        writeln!(w, "Dependencies (auto-discovered):")?;
+        for auto in &service.auto_dependencies {
+            let pattern = &auto.pattern;
+            write_dependency(
+                &mut w,
+                pattern,
+                Some(auto.language),
+                &peers_of(pattern),
+                opts,
+            )?;
+        }
+    }
+
+    if !opts.config.global_dependencies.is_empty() {
+        writeln!(w, "Dependencies (global):")?;
+        for dep in &opts.config.global_dependencies {
+            write_dependency(&mut w, dep, None, &[], opts)?;
+        }
+    }
+
+    let mut transitive: Vec<_> = dependency::service_dependencies(&services, service)
+        .into_iter()
+        .map(|svc| service_loc(svc, opts))
+        .collect();
+    if !transitive.is_empty() {
+        transitive.sort();
+        writeln!(w, "Services (transitive):")?;
+        for svc in transitive {
+            writeln!(w, "  - {svc}")?;
+        }
+    }
+
+    Ok(())
+}
+
+fn write_dependency<W>(
+    w: &mut W,
+    dep: &DepPattern,
+    language: Option<Language>,
+    peers: &[Cow<str>],
+    opts: &Opts,
+) -> std::io::Result<()>
+where
+    W: Write,
+{
+    let loc = match dep.plain_path() {
+        Some(plain) if opts.relative => path::relative_to(plain, &opts.target.canonicalized),
+        _ => dep.to_string(),
+    };
+    write!(w, "  - {loc}")?;
+
+    if let Some(language) = language {
+        write!(w, " [{language}]")?;
+    }
+    if !peers.is_empty() {
+        write!(w, " -> {}", peers.join(", "))?;
+    }
+
+    writeln!(w)
 }
 
 /// Output the determined list of services to STDOUT.
@@ -213,12 +288,14 @@ where
 mod tests {
     use std::io::Cursor;
 
+    use anyhow::Result;
+
     use crate::cli::Opts;
     use crate::config::{
         AutoDiscoveryConfig, Config, DepPattern, DotnetConfig, FlutterConfig, GoConfig,
     };
     use crate::path::PathInfo;
-    use crate::{dependencies, graph, validate};
+    use crate::{dependencies, graph, write_validation};
 
     fn mk_opts() -> Opts {
         Opts {
@@ -246,9 +323,34 @@ mod tests {
     }
 
     #[test]
-    fn validate_does_not_fail() {
-        // we just test that it does not fail
-        validate("./examples/full/service-c", mk_opts());
+    fn validate_nested_path() -> Result<()> {
+        let opts = Opts {
+            target: PathInfo::new("./tests/examples/peer", "")?,
+            relative: true,
+            ..mk_opts()
+        };
+        let mut output = Vec::new();
+        write_validation(&mut output, "service/src/file", &opts)?;
+
+        let output = String::from_utf8(output)?;
+        assert!(output.contains("Service: ./service\n"), "{output}");
+        assert!(output.contains("  - ./lib-a/src -> ./lib-a\n"), "{output}");
+        assert!(
+            output.contains("Services (transitive):\n  - ./lib-a\n  - ./lib-b\n"),
+            "{output}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn validate_without_service() -> Result<()> {
+        let opts = Opts {
+            target: PathInfo::new("./tests/examples/peer", "")?,
+            ..mk_opts()
+        };
+
+        assert!(write_validation(Vec::new(), "no-service/file", &opts).is_err());
+        Ok(())
     }
 
     #[test]

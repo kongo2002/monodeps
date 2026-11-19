@@ -166,7 +166,7 @@ mod tests {
         let mut non_hashes = 0usize;
         let mut uniques = HashSet::new();
         for dep in dependencies {
-            if let Some(hash) = dep.hash() {
+            if let Some(hash) = dep.plain_path() {
                 uniques.insert(hash.to_owned());
             } else {
                 non_hashes += 1;

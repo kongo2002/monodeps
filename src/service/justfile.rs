@@ -105,7 +105,7 @@ mod tests {
 
     fn extract(line: &str, dir: &Path) -> Option<String> {
         let pattern = extract_from_line(line, dir)?;
-        let hash = pattern.hash()?;
+        let hash = pattern.plain_path()?;
 
         Some(hash.to_string())
     }

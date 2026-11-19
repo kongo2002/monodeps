@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::Path;
 
 use crate::cli::Opts;
 use crate::path::PathInfo;
@@ -171,23 +172,72 @@ fn check_file_dependency(
     pattern: &PathInfo,
     opts: &Opts,
 ) -> Result<Option<PathInfo>> {
-    let file_path = std::path::PathBuf::from(&pattern.canonicalized);
+    let Some(parent) = Path::new(&pattern.canonicalized).parent() else {
+        return Ok(None);
+    };
+    let owner = owning_service(services, parent, &opts.target.canonicalized)?
+        .map(|svc| svc.path.canonicalized.clone());
 
-    for path in file_path.ancestors().skip(1) {
-        let str_path = path
+    Ok(owner.and_then(|owner| services.get_mut(&owner)).map(|svc| {
+        svc.trigger(BuildTrigger::FileChange);
+        svc.path.clone()
+    }))
+}
+
+/// The innermost service containing `path` (or being `path` itself), not looking beyond `root`.
+pub fn owning_service<'a>(
+    services: &'a HashMap<String, Service>,
+    path: &Path,
+    root: &str,
+) -> Result<Option<&'a Service>> {
+    for ancestor in path.ancestors() {
+        let str_path = ancestor
             .to_str()
-            .ok_or_else(|| anyhow!("cannot determine parent path for {}", file_path.display()))?;
+            .ok_or_else(|| anyhow!("cannot determine parent path for {}", path.display()))?;
 
-        if let Some(entry) = services.get_mut(str_path) {
-            entry.trigger(BuildTrigger::FileChange);
-            return Ok(Some(entry.path.clone()));
+        if let Some(svc) = services.get(str_path) {
+            return Ok(Some(svc));
         }
 
-        // only walk directories until the root project directory
-        if str_path == opts.target.canonicalized {
+        if str_path == root {
             break;
         }
     }
 
     Ok(None)
+}
+
+/// All services `service` depends on, directly or transitively, using the same peer dependency
+/// matching as `resolve`.
+pub fn service_dependencies<'a>(
+    services: &'a HashMap<String, Service>,
+    service: &'a Service,
+) -> Vec<&'a Service> {
+    let mut found: Vec<&Service> = Vec::new();
+    let mut pending = vec![service];
+
+    while let Some(current) = pending.pop() {
+        for other in services.values() {
+            let known = other.path.canonicalized == service.path.canonicalized
+                || found
+                    .iter()
+                    .any(|svc| svc.path.canonicalized == other.path.canonicalized);
+
+            if !known && depends_on(current, &other.path.canonicalized) {
+                found.push(other);
+                pending.push(other);
+            }
+        }
+    }
+
+    found
+}
+
+fn depends_on(service: &Service, service_path: &str) -> bool {
+    service
+        .depsfile
+        .dependencies
+        .iter()
+        .chain(service.auto_dependencies.iter().map(|auto| &auto.pattern))
+        .any(|dep| dep.is_matched_by(service_path))
 }
