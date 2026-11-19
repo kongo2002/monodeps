@@ -7,6 +7,7 @@ use anyhow::Result;
 use crate::cli::Opts;
 use crate::config::DepPattern;
 
+use super::index::RepoIndex;
 use super::{LanguageAnalyzer, parent_dir};
 
 pub(super) struct CargoAnalyzer;
@@ -16,7 +17,13 @@ impl LanguageAnalyzer for CargoAnalyzer {
         file_name == "cargo.toml"
     }
 
-    fn dependencies(&self, files: &[&Path], _dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
+    fn dependencies(
+        &self,
+        files: &[&Path],
+        _dir: &str,
+        _index: &RepoIndex,
+        _opts: &Opts,
+    ) -> Result<Vec<DepPattern>> {
         let mut deps = Vec::new();
 
         for file in files {
@@ -67,6 +74,7 @@ fn collect_path_deps(table: &toml::Value, base: &PathBuf) -> Vec<DepPattern> {
 
 #[cfg(test)]
 mod tests {
+    use crate::service::index::RepoIndex;
     use std::fs;
 
     use anyhow::Result;
@@ -110,7 +118,13 @@ mod tests {
         fs::write(&path, cargo_toml)?;
 
         let opts = mk_opts(dir.path().to_str().unwrap())?;
-        CargoAnalyzer.dependencies(&[path.as_path()], dir.path().to_str().unwrap(), &opts)
+        let index = RepoIndex::build(dir.path(), |_| true);
+        CargoAnalyzer.dependencies(
+            &[path.as_path()],
+            dir.path().to_str().unwrap(),
+            &index,
+            &opts,
+        )
     }
 
     #[test]

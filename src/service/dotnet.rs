@@ -8,6 +8,7 @@ use crate::cli::Opts;
 use crate::config::DepPattern;
 use crate::service::parent_dir;
 
+use super::index::RepoIndex;
 use super::{LanguageAnalyzer, nearest_ancestor};
 
 const DIRECTORY_FILES: [DirectoryFile; 3] = [
@@ -88,7 +89,13 @@ impl LanguageAnalyzer for DotnetAnalyzer {
         file_name.ends_with(".csproj")
     }
 
-    fn dependencies(&self, files: &[&Path], dir: &str, opts: &Opts) -> Result<Vec<DepPattern>> {
+    fn dependencies(
+        &self,
+        files: &[&Path],
+        dir: &str,
+        _index: &RepoIndex,
+        opts: &Opts,
+    ) -> Result<Vec<DepPattern>> {
         let mut collected_imports = Vec::new();
 
         for file in files {

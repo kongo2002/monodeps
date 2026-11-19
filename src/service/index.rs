@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use super::non_hidden_files;
+use walkdir::{DirEntry, WalkDir};
 
 /// All files of a directory tree that passed a name filter, collected in a single walk.
 pub(super) struct RepoIndex {
@@ -46,6 +46,14 @@ impl RepoIndex {
         &self.files
     }
 
+    /// All indexed files whose file name equals `file_name` (case-sensitive).
+    pub fn named<'a>(&'a self, file_name: &'a str) -> impl Iterator<Item = &'a Path> {
+        self.files
+            .iter()
+            .map(|f| f.path.as_path())
+            .filter(move |path| path.file_name().is_some_and(|name| name == file_name))
+    }
+
     /// All indexed files below `dir`, including those of nested directories.
     pub fn within<P>(&self, dir: P) -> &[IndexedFile]
     where
@@ -58,6 +66,25 @@ impl RepoIndex {
 
         &self.files[start..start + len]
     }
+}
+
+/// Return a `DirEntry` iterator of all files and folders in the given directory (`dir`) that are
+/// not hidden or part of `node_modules`.
+fn non_hidden_files<P>(dir: P) -> impl IntoIterator<Item = DirEntry>
+where
+    P: AsRef<Path>,
+{
+    WalkDir::new(dir)
+        .into_iter()
+        // filter hidden files/directories
+        .filter_entry(|e| {
+            !e.file_name()
+                .to_str()
+                .map(|s| s.starts_with(".") || s == "node_modules")
+                .unwrap_or(false)
+        })
+        // skip errors (e.g. non permission directories)
+        .filter_map(|e| e.ok())
 }
 
 #[cfg(test)]

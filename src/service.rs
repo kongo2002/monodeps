@@ -10,13 +10,12 @@ use crate::config::{DepPattern, Depsfile, DepsfileType, Language};
 use crate::path::PathInfo;
 use anyhow::{Result, anyhow};
 use serde::Serialize;
-use walkdir::{DirEntry, WalkDir};
 
 use self::cargo::CargoAnalyzer;
 use self::dotnet::DotnetAnalyzer;
 use self::flutter::FlutterAnalyzer;
 use self::go::GoAnalyzer;
-use self::index::{IndexedFile, RepoIndex};
+use self::index::RepoIndex;
 use self::javascript::JavaScriptAnalyzer;
 use self::justfile::JustfileAnalyzer;
 use self::kustomize::KustomizeAnalyzer;
@@ -79,7 +78,13 @@ impl Display for BuildTrigger {
 trait LanguageAnalyzer {
     /// Auto-discover all dependencies for the given service directory (`dir`) and using the
     /// pre-discovered, relevant `files`.
-    fn dependencies(&self, files: &[&Path], dir: &str, opts: &Opts) -> Result<Vec<DepPattern>>;
+    fn dependencies(
+        &self,
+        files: &[&Path],
+        dir: &str,
+        index: &RepoIndex,
+        opts: &Opts,
+    ) -> Result<Vec<DepPattern>>;
 
     /// Predicate to determine whether the given file name may be relevant for the
     /// `LanguageAnalyzer`. Will be potentially invoked for every file in the service directory,
@@ -126,7 +131,7 @@ impl Analyzer {
     fn discover(
         &self,
         languages: &[Language],
-        files: &[IndexedFile],
+        index: &RepoIndex,
         dir: &str,
         opts: &Opts,
     ) -> Vec<AutoDependency> {
@@ -140,7 +145,7 @@ impl Analyzer {
             .collect();
 
         let mut file_candidates: HashMap<Language, Vec<&Path>> = HashMap::new();
-        for file in files {
+        for file in index.within(dir) {
             for (language, analyzer) in &analyzers {
                 if analyzer.file_relevant(&file.name) {
                     file_candidates
@@ -159,7 +164,7 @@ impl Analyzer {
                 let Some(relevant_files) = file_candidates.remove(language) else {
                     return Vec::new();
                 };
-                let result = analyzer.dependencies(&relevant_files, dir, opts);
+                let result = analyzer.dependencies(&relevant_files, dir, index, opts);
 
                 match result {
                     Ok(deps) => deps
@@ -291,12 +296,7 @@ impl Service {
 
         let mut unique_auto_dep_paths = HashSet::new();
         let auto_dependencies = analyzer
-            .discover(
-                languages,
-                index.within(&ctx.service_location.canonicalized),
-                &ctx.service_location.canonicalized,
-                opts,
-            )
+            .discover(languages, index, &ctx.service_location.canonicalized, opts)
             .into_iter()
             .filter(|auto_dep| {
                 // auto-discovered dependencies could be "anywhere", that's why we filter
@@ -356,25 +356,6 @@ impl Service {
 
 fn not_within_service(service_dir: &PathInfo, pattern: &DepPattern) -> bool {
     !pattern.is_child_of(&service_dir.canonicalized)
-}
-
-/// Return a `DirEntry` iterator of all files and folders in the given directory (`dir`) that are
-/// not hidden or part of `node_modules`.
-fn non_hidden_files<P>(dir: P) -> impl IntoIterator<Item = DirEntry>
-where
-    P: AsRef<Path>,
-{
-    WalkDir::new(dir)
-        .into_iter()
-        // filter hidden files/directories
-        .filter_entry(|e| {
-            !e.file_name()
-                .to_str()
-                .map(|s| s.starts_with(".") || s == "node_modules")
-                .unwrap_or(false)
-        })
-        // skip errors (e.g. non permission directories)
-        .filter_map(|e| e.ok())
 }
 
 /// Helper structure to recursively find file references in language files (e.g.

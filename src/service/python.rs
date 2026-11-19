@@ -10,7 +10,8 @@ use crate::cli::Opts;
 use crate::config::DepPattern;
 use crate::path::PathInfo;
 
-use super::{LanguageAnalyzer, non_hidden_files, parent_dir};
+use super::index::RepoIndex;
+use super::{LanguageAnalyzer, parent_dir};
 
 pub(super) struct PythonAnalyzer {
     root: PathInfo,
@@ -25,9 +26,9 @@ impl PythonAnalyzer {
         }
     }
 
-    fn packages(&self) -> &HashMap<String, DepPattern> {
+    fn packages(&self, index: &RepoIndex) -> &HashMap<String, DepPattern> {
         self.packages
-            .get_or_init(|| try_load_packages(&self.root.canonicalized))
+            .get_or_init(|| try_load_packages(index, &self.root.canonicalized))
     }
 }
 
@@ -36,9 +37,15 @@ impl LanguageAnalyzer for PythonAnalyzer {
         file_name == "pyproject.toml"
     }
 
-    fn dependencies(&self, files: &[&Path], dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
+    fn dependencies(
+        &self,
+        files: &[&Path],
+        dir: &str,
+        index: &RepoIndex,
+        _opts: &Opts,
+    ) -> Result<Vec<DepPattern>> {
         let mut deps = Vec::new();
-        let all_packages = self.packages();
+        let all_packages = self.packages(index);
 
         for file in files {
             let pyproject = parse_pyproject(file)?;
@@ -68,23 +75,19 @@ impl LanguageAnalyzer for PythonAnalyzer {
     }
 }
 
-fn try_load_packages(root: &str) -> HashMap<String, DepPattern> {
-    load_packages(Path::new(root)).unwrap_or_else(|err| {
+fn try_load_packages(index: &RepoIndex, root: &str) -> HashMap<String, DepPattern> {
+    load_packages(index, Path::new(root)).unwrap_or_else(|err| {
         log::warn!("python: failed to load workspace packages: {err}");
         HashMap::new()
     })
 }
 
-fn load_packages(root: &Path) -> Result<HashMap<String, DepPattern>> {
+fn load_packages(index: &RepoIndex, root: &Path) -> Result<HashMap<String, DepPattern>> {
     let mut packages = HashMap::new();
-    for entry in non_hidden_files(root) {
-        if !entry.file_name().eq("pyproject.toml") {
-            continue;
-        }
-
-        let pyproject = parse_pyproject(entry.path())?;
+    for path in index.named("pyproject.toml") {
+        let pyproject = parse_pyproject(path)?;
         if let Some(name) = pyproject.project.and_then(|p| p.name) {
-            let parent = parent_dir(entry.path())
+            let parent = parent_dir(path)
                 .ok_or_else(|| anyhow!("cannot determine pyproject.toml directory"))?;
             let pattern = DepPattern::plain(parent, root)?;
             packages.insert(name, pattern);
@@ -129,6 +132,7 @@ struct UvSource {
 
 #[cfg(test)]
 mod tests {
+    use crate::service::index::RepoIndex;
     use std::fs;
 
     use crate::cli::Opts;
@@ -194,7 +198,12 @@ mod tests {
         let pyproject = svc_dir.join("pyproject.toml");
 
         let deps = analyzer
-            .dependencies(&[pyproject.as_path()], svc_dir.to_str().unwrap(), &opts)
+            .dependencies(
+                &[pyproject.as_path()],
+                svc_dir.to_str().unwrap(),
+                &RepoIndex::build(root, |_| true),
+                &opts,
+            )
             .unwrap();
 
         assert_eq!(deps.len(), 1);
@@ -221,7 +230,12 @@ mod tests {
         let pyproject = svc_dir.join("pyproject.toml");
 
         let deps = analyzer
-            .dependencies(&[pyproject.as_path()], svc_dir.to_str().unwrap(), &opts)
+            .dependencies(
+                &[pyproject.as_path()],
+                svc_dir.to_str().unwrap(),
+                &RepoIndex::build(root, |_| true),
+                &opts,
+            )
             .unwrap();
 
         assert_eq!(deps.len(), 1);
@@ -248,7 +262,12 @@ mod tests {
         let pyproject = svc_dir.join("pyproject.toml");
 
         let deps = analyzer
-            .dependencies(&[pyproject.as_path()], svc_dir.to_str().unwrap(), &opts)
+            .dependencies(
+                &[pyproject.as_path()],
+                svc_dir.to_str().unwrap(),
+                &RepoIndex::build(root, |_| true),
+                &opts,
+            )
             .unwrap();
 
         assert!(deps.is_empty());
@@ -272,7 +291,12 @@ mod tests {
         let pyproject = svc_dir.join("pyproject.toml");
 
         let deps = analyzer
-            .dependencies(&[pyproject.as_path()], svc_dir.to_str().unwrap(), &opts)
+            .dependencies(
+                &[pyproject.as_path()],
+                svc_dir.to_str().unwrap(),
+                &RepoIndex::build(root, |_| true),
+                &opts,
+            )
             .unwrap();
 
         assert!(deps.is_empty());
@@ -301,7 +325,7 @@ mod tests {
             "[build-system]\nrequires = [\"hatchling\"]\n",
         );
 
-        let packages = load_packages(root).unwrap();
+        let packages = load_packages(&RepoIndex::build(root, |_| true), root).unwrap();
         assert_eq!(packages.len(), 2);
         assert!(packages.contains_key("lib-a"));
         assert!(packages.contains_key("lib-b"));

@@ -11,7 +11,8 @@ use crate::cli::Opts;
 use crate::config::DepPattern;
 use crate::path::PathInfo;
 
-use super::{LanguageAnalyzer, non_hidden_files, parent_dir};
+use super::index::RepoIndex;
+use super::{LanguageAnalyzer, parent_dir};
 
 pub(super) struct JavaScriptAnalyzer {
     root: PathInfo,
@@ -25,9 +26,9 @@ impl JavaScriptAnalyzer {
         JavaScriptAnalyzer { packages, root }
     }
 
-    fn packages(&self) -> &HashMap<String, DepPattern> {
+    fn packages(&self, index: &RepoIndex) -> &HashMap<String, DepPattern> {
         self.packages
-            .get_or_init(|| try_load_packages(&self.root.canonicalized))
+            .get_or_init(|| try_load_packages(index, &self.root.canonicalized))
     }
 }
 
@@ -36,10 +37,16 @@ impl LanguageAnalyzer for JavaScriptAnalyzer {
         file_name == "package.json"
     }
 
-    fn dependencies(&self, files: &[&Path], _dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
+    fn dependencies(
+        &self,
+        files: &[&Path],
+        _dir: &str,
+        index: &RepoIndex,
+        _opts: &Opts,
+    ) -> Result<Vec<DepPattern>> {
         let mut deps = Vec::new();
 
-        let all_packages = self.packages();
+        let all_packages = self.packages(index);
         if all_packages.is_empty() {
             return Ok(deps);
         }
@@ -63,29 +70,25 @@ impl LanguageAnalyzer for JavaScriptAnalyzer {
     }
 }
 
-fn try_load_packages<P>(root: P) -> HashMap<String, DepPattern>
+fn try_load_packages<P>(index: &RepoIndex, root: P) -> HashMap<String, DepPattern>
 where
     P: AsRef<Path>,
 {
-    load_packages(root).unwrap_or_else(|err| {
+    load_packages(index, root).unwrap_or_else(|err| {
         log::warn!("javascript: failed to load workspace packages: {err}");
         HashMap::new()
     })
 }
 
-fn load_packages<P>(root: P) -> Result<HashMap<String, DepPattern>>
+fn load_packages<P>(index: &RepoIndex, root: P) -> Result<HashMap<String, DepPattern>>
 where
     P: AsRef<Path>,
 {
     let mut packages = HashMap::new();
-    for entry in non_hidden_files(&root) {
-        if !entry.file_name().eq("package.json") {
-            continue;
-        }
-
-        let from_package_json = parse_package_json(entry.path())?;
+    for path in index.named("package.json") {
+        let from_package_json = parse_package_json(path)?;
         if !from_package_json.name.is_empty() {
-            let parent = parent_dir(entry.path())
+            let parent = parent_dir(path)
                 .ok_or_else(|| anyhow!("cannot determine package.json directory"))?;
             let pattern = DepPattern::plain(parent, &root)?;
 

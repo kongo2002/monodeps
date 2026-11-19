@@ -7,6 +7,7 @@ use crate::config::DepPattern;
 use crate::service::ReferenceLineFinder;
 
 use super::LanguageAnalyzer;
+use super::index::RepoIndex;
 
 pub(super) struct JustfileAnalyzer {}
 
@@ -15,7 +16,13 @@ impl LanguageAnalyzer for JustfileAnalyzer {
         file_name == "justfile" || file_name.ends_with(".just")
     }
 
-    fn dependencies(&self, files: &[&Path], _dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
+    fn dependencies(
+        &self,
+        files: &[&Path],
+        _dir: &str,
+        _index: &RepoIndex,
+        _opts: &Opts,
+    ) -> Result<Vec<DepPattern>> {
         let mut dependencies = Vec::new();
 
         for file in files {

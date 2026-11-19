@@ -7,6 +7,7 @@ use anyhow::Result;
 use crate::cli::Opts;
 use crate::config::DepPattern;
 
+use super::index::RepoIndex;
 use super::{LanguageAnalyzer, ReferenceLineFinder};
 
 pub(super) struct MakefileAnalyzer {
@@ -53,7 +54,13 @@ impl LanguageAnalyzer for MakefileAnalyzer {
         file_name == "makefile"
     }
 
-    fn dependencies(&self, files: &[&Path], _dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
+    fn dependencies(
+        &self,
+        files: &[&Path],
+        _dir: &str,
+        _index: &RepoIndex,
+        _opts: &Opts,
+    ) -> Result<Vec<DepPattern>> {
         let mut dependencies = Vec::new();
 
         for file in files {

@@ -2,13 +2,13 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 use anyhow::Result;
-use walkdir::DirEntry;
 
 use crate::cli::Opts;
 use crate::config::DepPattern;
 use crate::path::PathInfo;
 
-use super::{LanguageAnalyzer, ReferenceLineFinder, non_hidden_files};
+use super::index::RepoIndex;
+use super::{LanguageAnalyzer, ReferenceLineFinder};
 
 pub(super) struct ProtoAnalyzer {
     root: PathInfo,
@@ -25,9 +25,9 @@ impl ProtoAnalyzer {
         }
     }
 
-    fn proto_files(&self) -> &Vec<PathInfo> {
+    fn proto_files(&self, index: &RepoIndex) -> &Vec<PathInfo> {
         self.all_proto_files
-            .get_or_init(|| try_find_all_proto_files(&self.root.canonicalized))
+            .get_or_init(|| try_find_all_proto_files(index, &self.root.canonicalized))
     }
 }
 
@@ -36,8 +36,14 @@ impl LanguageAnalyzer for ProtoAnalyzer {
         file_name.ends_with(".proto")
     }
 
-    fn dependencies(&self, files: &[&Path], _dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
-        let all_protos = self.proto_files();
+    fn dependencies(
+        &self,
+        files: &[&Path],
+        _dir: &str,
+        index: &RepoIndex,
+        _opts: &Opts,
+    ) -> Result<Vec<DepPattern>> {
+        let all_protos = self.proto_files(index);
         let mut dependencies = Vec::new();
 
         for file in files {
@@ -79,28 +85,15 @@ fn extract_from_line(line: &str, proto_candidates: &[PathInfo]) -> Option<DepPat
     .ok()
 }
 
-fn try_find_all_proto_files(root_dir: &str) -> Vec<PathInfo> {
-    find_all_proto_files(root_dir).unwrap_or_else(|_| Vec::new())
+fn try_find_all_proto_files(index: &RepoIndex, root_dir: &str) -> Vec<PathInfo> {
+    find_all_proto_files(index, root_dir).unwrap_or_else(|_| Vec::new())
 }
 
-fn find_all_proto_files(root_dir: &str) -> Result<Vec<PathInfo>> {
-    let mut proto_files = Vec::new();
-
-    for entry in non_hidden_files(root_dir) {
-        if !is_proto(&entry) {
-            continue;
-        }
-
-        let path_info = PathInfo::new(entry.path(), root_dir)?;
-        proto_files.push(path_info);
-    }
-
-    Ok(proto_files)
-}
-
-fn is_proto(entry: &DirEntry) -> bool {
-    let extension = entry.path().extension();
-    extension
-        .filter(|ext| ext.eq_ignore_ascii_case("proto"))
-        .is_some()
+fn find_all_proto_files(index: &RepoIndex, root_dir: &str) -> Result<Vec<PathInfo>> {
+    index
+        .files()
+        .iter()
+        .filter(|file| file.name.ends_with(".proto"))
+        .map(|file| PathInfo::new(&file.path, root_dir))
+        .collect()
 }

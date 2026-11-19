@@ -9,6 +9,7 @@ use crate::path::canonicalize;
 use crate::utils::{load_yaml, yaml_str_list};
 
 use super::LanguageAnalyzer;
+use super::index::RepoIndex;
 
 pub(super) struct KustomizeAnalyzer {}
 
@@ -17,7 +18,13 @@ impl LanguageAnalyzer for KustomizeAnalyzer {
         file_name == "kustomization.yaml" || file_name == "kustomization.yml"
     }
 
-    fn dependencies(&self, files: &[&Path], dir: &str, _opts: &Opts) -> Result<Vec<DepPattern>> {
+    fn dependencies(
+        &self,
+        files: &[&Path],
+        dir: &str,
+        _index: &RepoIndex,
+        _opts: &Opts,
+    ) -> Result<Vec<DepPattern>> {
         let mut collected_imports = Vec::new();
 
         for file in files {
@@ -138,7 +145,6 @@ where
 mod tests {
     use crate::config::{AutoDiscoveryConfig, Config, DotnetConfig, FlutterConfig, GoConfig};
     use crate::path::PathInfo;
-    use crate::service::index::RepoIndex;
 
     use super::*;
     use std::fs::{self, File};
@@ -203,7 +209,7 @@ mod tests {
         });
         let files: Vec<_> = index.files().iter().map(|f| f.path.as_path()).collect();
 
-        analyzer.dependencies(&files, base_dir.to_str().unwrap(), opts)
+        analyzer.dependencies(&files, base_dir.to_str().unwrap(), &index, opts)
     }
 
     #[test]

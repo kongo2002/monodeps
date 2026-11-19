@@ -8,6 +8,7 @@ use crate::path::PathInfo;
 use crate::service::{ReferenceFinder, parent_dir};
 use crate::utils::{load_yaml, yaml_str_list};
 
+use super::index::RepoIndex;
 use super::{LanguageAnalyzer, nearest_ancestor};
 
 struct Workspace {
@@ -100,7 +101,13 @@ impl LanguageAnalyzer for FlutterAnalyzer {
         file_name == "pubspec.yaml"
     }
 
-    fn dependencies(&self, files: &[&Path], dir: &str, opts: &Opts) -> Result<Vec<DepPattern>> {
+    fn dependencies(
+        &self,
+        files: &[&Path],
+        dir: &str,
+        _index: &RepoIndex,
+        opts: &Opts,
+    ) -> Result<Vec<DepPattern>> {
         let mut dependencies = Vec::new();
 
         for file in files {

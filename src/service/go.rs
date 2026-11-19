@@ -6,6 +6,7 @@ use anyhow::Result;
 use crate::cli::Opts;
 use crate::config::{DepPattern, GoConfig};
 
+use super::index::RepoIndex;
 use super::{LanguageAnalyzer, read_lines};
 
 const SCAN_MAX_LINES: usize = 300;
@@ -17,7 +18,13 @@ impl LanguageAnalyzer for GoAnalyzer {
         file_name.ends_with(".go")
     }
 
-    fn dependencies(&self, files: &[&Path], _dir: &str, config: &Opts) -> Result<Vec<DepPattern>> {
+    fn dependencies(
+        &self,
+        files: &[&Path],
+        _dir: &str,
+        _index: &RepoIndex,
+        config: &Opts,
+    ) -> Result<Vec<DepPattern>> {
         let mut collected_imports = HashSet::new();
 
         for file in files {
