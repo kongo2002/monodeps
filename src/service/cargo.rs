@@ -12,11 +12,11 @@ use super::{LanguageAnalyzer, parent_dir};
 
 pub(super) struct CargoAnalyzer;
 
-impl LanguageAnalyzer for CargoAnalyzer {
-    fn file_relevant(&self, file_name: &str) -> bool {
-        file_name == "cargo.toml"
-    }
+pub(super) fn file_relevant(file_name: &str) -> bool {
+    file_name == "cargo.toml"
+}
 
+impl LanguageAnalyzer for CargoAnalyzer {
     fn dependencies(
         &self,
         files: &[&Path],
@@ -118,7 +118,7 @@ mod tests {
         fs::write(&path, cargo_toml)?;
 
         let opts = mk_opts(dir.path().to_str().unwrap())?;
-        let index = RepoIndex::build(dir.path(), |_| true);
+        let index = RepoIndex::build(dir.path(), |_, _| true);
         CargoAnalyzer.dependencies(
             &[path.as_path()],
             dir.path().to_str().unwrap(),

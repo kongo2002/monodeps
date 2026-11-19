@@ -32,11 +32,11 @@ impl PythonAnalyzer {
     }
 }
 
-impl LanguageAnalyzer for PythonAnalyzer {
-    fn file_relevant(&self, file_name: &str) -> bool {
-        file_name == "pyproject.toml"
-    }
+pub(super) fn file_relevant(file_name: &str) -> bool {
+    file_name == "pyproject.toml"
+}
 
+impl LanguageAnalyzer for PythonAnalyzer {
     fn dependencies(
         &self,
         files: &[&Path],
@@ -201,7 +201,7 @@ mod tests {
             .dependencies(
                 &[pyproject.as_path()],
                 svc_dir.to_str().unwrap(),
-                &RepoIndex::build(root, |_| true),
+                &RepoIndex::build(root, |_, _| true),
                 &opts,
             )
             .unwrap();
@@ -233,7 +233,7 @@ mod tests {
             .dependencies(
                 &[pyproject.as_path()],
                 svc_dir.to_str().unwrap(),
-                &RepoIndex::build(root, |_| true),
+                &RepoIndex::build(root, |_, _| true),
                 &opts,
             )
             .unwrap();
@@ -265,7 +265,7 @@ mod tests {
             .dependencies(
                 &[pyproject.as_path()],
                 svc_dir.to_str().unwrap(),
-                &RepoIndex::build(root, |_| true),
+                &RepoIndex::build(root, |_, _| true),
                 &opts,
             )
             .unwrap();
@@ -294,7 +294,7 @@ mod tests {
             .dependencies(
                 &[pyproject.as_path()],
                 svc_dir.to_str().unwrap(),
-                &RepoIndex::build(root, |_| true),
+                &RepoIndex::build(root, |_, _| true),
                 &opts,
             )
             .unwrap();
@@ -325,7 +325,7 @@ mod tests {
             "[build-system]\nrequires = [\"hatchling\"]\n",
         );
 
-        let packages = load_packages(&RepoIndex::build(root, |_| true), root).unwrap();
+        let packages = load_packages(&RepoIndex::build(root, |_, _| true), root).unwrap();
         assert_eq!(packages.len(), 2);
         assert!(packages.contains_key("lib-a"));
         assert!(packages.contains_key("lib-b"));

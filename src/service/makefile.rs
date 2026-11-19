@@ -49,11 +49,11 @@ impl MakefileAnalyzer {
     }
 }
 
-impl LanguageAnalyzer for MakefileAnalyzer {
-    fn file_relevant(&self, file_name: &str) -> bool {
-        file_name == "makefile"
-    }
+pub(super) fn file_relevant(file_name: &str) -> bool {
+    file_name == "makefile"
+}
 
+impl LanguageAnalyzer for MakefileAnalyzer {
     fn dependencies(
         &self,
         files: &[&Path],

@@ -96,11 +96,11 @@ impl FlutterAnalyzer {
     }
 }
 
-impl LanguageAnalyzer for FlutterAnalyzer {
-    fn file_relevant(&self, file_name: &str) -> bool {
-        file_name == "pubspec.yaml"
-    }
+pub(super) fn file_relevant(file_name: &str) -> bool {
+    file_name == "pubspec.yaml"
+}
 
+impl LanguageAnalyzer for FlutterAnalyzer {
     fn dependencies(
         &self,
         files: &[&Path],

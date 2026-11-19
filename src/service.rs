@@ -85,11 +85,26 @@ trait LanguageAnalyzer {
         index: &RepoIndex,
         opts: &Opts,
     ) -> Result<Vec<DepPattern>>;
+}
 
-    /// Predicate to determine whether the given file name may be relevant for the
-    /// `LanguageAnalyzer`. Will be potentially invoked for every file in the service directory,
-    /// before the actual auto-discovery is triggered. The passed `file_name` is lowercased.
-    fn file_relevant(&self, file_name: &str) -> bool;
+/// Predicate to determine whether the given file name may be relevant for the `LanguageAnalyzer`
+/// of `language`. The passed `file_name` is lowercased.
+///
+/// Deliberately not part of `LanguageAnalyzer`: it runs inside the parallel file walk, which
+/// requires `Sync`, but not every analyzer is (e.g. the compiled XPath in dotnet).
+fn file_relevant(language: Language, file_name: &str) -> bool {
+    match language {
+        Language::Golang => go::file_relevant(file_name),
+        Language::Dotnet => dotnet::file_relevant(file_name),
+        Language::Flutter => flutter::file_relevant(file_name),
+        Language::Kustomize => kustomize::file_relevant(file_name),
+        Language::JavaScript => javascript::file_relevant(file_name),
+        Language::Protobuf => proto::file_relevant(file_name),
+        Language::Justfile => justfile::file_relevant(file_name),
+        Language::Makefile => makefile::file_relevant(file_name),
+        Language::Python => python::file_relevant(file_name),
+        Language::Rust => cargo::file_relevant(file_name),
+    }
 }
 
 struct Analyzer {
@@ -115,14 +130,13 @@ impl Analyzer {
     /// Index all files below `root` that are either a service root or relevant to any of the
     /// enabled language analyzers.
     fn index(&self, root: &str, opts: &Opts) -> RepoIndex {
-        RepoIndex::build(root, |name| {
-            if map_depsfile(name, opts).is_some() {
-                return true;
-            }
-            let lowercased = name.to_lowercase();
-            self.analyzers
-                .values()
-                .any(|analyzer| analyzer.file_relevant(&lowercased))
+        let languages: Vec<_> = self.analyzers.keys().copied().collect();
+
+        RepoIndex::build(root, |name, lowercased| {
+            map_depsfile(name, opts).is_some()
+                || languages
+                    .iter()
+                    .any(|language| file_relevant(*language, lowercased))
         })
     }
 
@@ -146,8 +160,8 @@ impl Analyzer {
 
         let mut file_candidates: HashMap<Language, Vec<&Path>> = HashMap::new();
         for file in index.within(dir) {
-            for (language, analyzer) in &analyzers {
-                if analyzer.file_relevant(&file.name) {
+            for (language, _) in &analyzers {
+                if file_relevant(**language, &file.name) {
                     file_candidates
                         .entry(**language)
                         .or_default()

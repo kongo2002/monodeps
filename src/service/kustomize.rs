@@ -13,11 +13,11 @@ use super::index::RepoIndex;
 
 pub(super) struct KustomizeAnalyzer {}
 
-impl LanguageAnalyzer for KustomizeAnalyzer {
-    fn file_relevant(&self, file_name: &str) -> bool {
-        file_name == "kustomization.yaml" || file_name == "kustomization.yml"
-    }
+pub(super) fn file_relevant(file_name: &str) -> bool {
+    file_name == "kustomization.yaml" || file_name == "kustomization.yml"
+}
 
+impl LanguageAnalyzer for KustomizeAnalyzer {
     fn dependencies(
         &self,
         files: &[&Path],
@@ -204,9 +204,7 @@ mod tests {
 
     fn discover(base_dir: &Path, opts: &Opts) -> Result<Vec<DepPattern>> {
         let analyzer = KustomizeAnalyzer {};
-        let index = RepoIndex::build(base_dir, |name| {
-            analyzer.file_relevant(&name.to_lowercase())
-        });
+        let index = RepoIndex::build(base_dir, |_, lowercased| file_relevant(lowercased));
         let files: Vec<_> = index.files().iter().map(|f| f.path.as_path()).collect();
 
         analyzer.dependencies(&files, base_dir.to_str().unwrap(), &index, opts)

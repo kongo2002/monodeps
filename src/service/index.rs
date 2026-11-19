@@ -16,23 +16,38 @@ pub(super) struct IndexedFile {
 }
 
 impl RepoIndex {
-    /// Walk `root` and keep every non-directory entry whose file name satisfies `keep`.
+    /// Walk `root` and keep every non-directory entry whose file name satisfies `keep`, which is
+    /// passed both the original and the lowercased file name. Hidden files and files excluded by
+    /// `.gitignore` or `.ignore` files are skipped.
     pub fn build<P, F>(root: P, keep: F) -> Self
     where
         P: AsRef<Path>,
-        F: Fn(&str) -> bool,
+        F: Fn(&str, &str) -> bool + Sync,
     {
-        let mut files: Vec<_> = non_ignored_files(root)
-            .into_iter()
-            .filter_map(|path| {
-                let name = path.file_name()?.to_str()?;
-                if !keep(name) {
-                    return None;
-                }
-                let name = name.to_lowercase();
-                Some(IndexedFile { path, name })
-            })
-            .collect();
+        let (tx, rx) = mpsc::channel();
+
+        WalkBuilder::new(root)
+            // results must not depend on the local machine's git configuration
+            .git_global(false)
+            .git_exclude(false)
+            .build_parallel()
+            .run(|| {
+                let tx = tx.clone();
+                let keep = &keep;
+                Box::new(move |entry| {
+                    // skip errors (e.g. non permission directories)
+                    if let Ok(entry) = entry
+                        && entry.file_type().is_some_and(|t| !t.is_dir())
+                        && let Some(file) = indexed_file(entry.into_path(), keep)
+                    {
+                        _ = tx.send(file);
+                    }
+                    WalkState::Continue
+                })
+            });
+
+        drop(tx);
+        let mut files: Vec<_> = rx.into_iter().collect();
 
         // byte-wise comparison is about 10x faster than the component-wise `Path` ordering
         files.sort_unstable_by(|a, b| bytes(&a.path).cmp(bytes(&b.path)));
@@ -76,34 +91,20 @@ fn bytes(path: &Path) -> &[u8] {
     path.as_os_str().as_encoded_bytes()
 }
 
-/// Collect all non-directory paths below `dir` that are neither hidden nor excluded by
-/// `.gitignore` or `.ignore` files.
-fn non_ignored_files<P>(dir: P) -> Vec<PathBuf>
+fn indexed_file<F>(path: PathBuf, keep: &F) -> Option<IndexedFile>
 where
-    P: AsRef<Path>,
+    F: Fn(&str, &str) -> bool,
 {
-    let (tx, rx) = mpsc::channel();
+    let name = path.file_name()?.to_str()?;
+    let lowercased = name.to_lowercase();
+    if !keep(name, &lowercased) {
+        return None;
+    }
 
-    WalkBuilder::new(dir)
-        // results must not depend on the local machine's git configuration
-        .git_global(false)
-        .git_exclude(false)
-        .build_parallel()
-        .run(|| {
-            let tx = tx.clone();
-            Box::new(move |entry| {
-                // skip errors (e.g. non permission directories)
-                if let Ok(entry) = entry
-                    && entry.file_type().is_some_and(|t| !t.is_dir())
-                {
-                    _ = tx.send(entry.into_path());
-                }
-                WalkState::Continue
-            })
-        });
-
-    drop(tx);
-    rx.into_iter().collect()
+    Some(IndexedFile {
+        path,
+        name: lowercased,
+    })
 }
 
 #[cfg(test)]
@@ -150,7 +151,7 @@ mod tests {
             std::fs::write(root.join(file), "")?;
         }
 
-        let idx = RepoIndex::build(root, |_| true);
+        let idx = RepoIndex::build(root, |_, _| true);
         let files: Vec<_> = idx.files().iter().map(|f| f.path.clone()).collect();
 
         assert_eq!(vec![root.join("kept/Depsfile")], files);

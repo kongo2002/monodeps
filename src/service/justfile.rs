@@ -11,11 +11,11 @@ use super::index::RepoIndex;
 
 pub(super) struct JustfileAnalyzer {}
 
-impl LanguageAnalyzer for JustfileAnalyzer {
-    fn file_relevant(&self, file_name: &str) -> bool {
-        file_name == "justfile" || file_name.ends_with(".just")
-    }
+pub(super) fn file_relevant(file_name: &str) -> bool {
+    file_name == "justfile" || file_name.ends_with(".just")
+}
 
+impl LanguageAnalyzer for JustfileAnalyzer {
     fn dependencies(
         &self,
         files: &[&Path],

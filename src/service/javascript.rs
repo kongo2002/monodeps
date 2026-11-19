@@ -32,11 +32,11 @@ impl JavaScriptAnalyzer {
     }
 }
 
-impl LanguageAnalyzer for JavaScriptAnalyzer {
-    fn file_relevant(&self, file_name: &str) -> bool {
-        file_name == "package.json"
-    }
+pub(super) fn file_relevant(file_name: &str) -> bool {
+    file_name == "package.json"
+}
 
+impl LanguageAnalyzer for JavaScriptAnalyzer {
     fn dependencies(
         &self,
         files: &[&Path],

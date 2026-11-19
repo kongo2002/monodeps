@@ -31,11 +31,11 @@ impl ProtoAnalyzer {
     }
 }
 
-impl LanguageAnalyzer for ProtoAnalyzer {
-    fn file_relevant(&self, file_name: &str) -> bool {
-        file_name.ends_with(".proto")
-    }
+pub(super) fn file_relevant(file_name: &str) -> bool {
+    file_name.ends_with(".proto")
+}
 
+impl LanguageAnalyzer for ProtoAnalyzer {
     fn dependencies(
         &self,
         files: &[&Path],

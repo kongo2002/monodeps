@@ -84,11 +84,11 @@ impl DotnetAnalyzer {
     }
 }
 
-impl LanguageAnalyzer for DotnetAnalyzer {
-    fn file_relevant(&self, file_name: &str) -> bool {
-        file_name.ends_with(".csproj")
-    }
+pub(super) fn file_relevant(file_name: &str) -> bool {
+    file_name.ends_with(".csproj")
+}
 
+impl LanguageAnalyzer for DotnetAnalyzer {
     fn dependencies(
         &self,
         files: &[&Path],

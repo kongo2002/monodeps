@@ -13,11 +13,11 @@ const SCAN_MAX_LINES: usize = 300;
 
 pub(super) struct GoAnalyzer {}
 
-impl LanguageAnalyzer for GoAnalyzer {
-    fn file_relevant(&self, file_name: &str) -> bool {
-        file_name.ends_with(".go")
-    }
+pub(super) fn file_relevant(file_name: &str) -> bool {
+    file_name.ends_with(".go")
+}
 
+impl LanguageAnalyzer for GoAnalyzer {
     fn dependencies(
         &self,
         files: &[&Path],
