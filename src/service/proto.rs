@@ -33,7 +33,7 @@ impl ProtoAnalyzer {
 
 impl LanguageAnalyzer for ProtoAnalyzer {
     fn file_relevant(&self, file_name: &str) -> bool {
-        file_name.ends_with("proto")
+        file_name.ends_with(".proto")
     }
 
     fn dependencies(
